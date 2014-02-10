@@ -91,11 +91,13 @@ class EprintsToRifcs extends Crosswalk {
 	
 	private function process_id_number($input_node,$output_nodes){
 		$output_nodes["collection"]->addChild("identifier", $this->escapeAmpersands($input_node))->addAttribute("type", "local");
-		$url = $output_nodes["collection"]->addChild("location")->addChild("address")->addChild("electronic");
-		$url->addAttribute("type","url");
-		$url->addChild("value",$this->escapeAmpersands($input_node));
+		if ($this->isUrl($input_node)) {
+			$url = $output_nodes["collection"]->addChild("location")->addChild("address")->addChild("electronic");
+			$url->addAttribute("type","url");
+			$url->addChild("value",$this->escapeAmpersands($input_node));
+			$output_nodes["citation_metadata"]->addChild("url", $this->escapeAmpersands($input_node));
+		}
 		$output_nodes["citation_metadata"]->addChild("identifier", $this->escapeAmpersands($input_node))->addAttribute("type", "local");
-		$output_nodes["citation_metadata"]->addChild("url", $this->escapeAmpersands($input_node));
 	}
 	
 	private function process_title($input_node,$output_nodes){
@@ -195,6 +197,7 @@ class EprintsToRifcs extends Crosswalk {
 	private function process_creators($input_node,$output_nodes){
 		foreach ($input_node->children() as $item) {
 			$name = "";
+			$id = null;
 			foreach ($item->children() as $child) {
 				if ($child->getName() == "name") {
 					foreach ($child->children() as $name_part) {
@@ -207,20 +210,21 @@ class EprintsToRifcs extends Crosswalk {
 					}
 					$output_nodes["citation_metadata"]->addChild("contributor")->addChild("namePart", $this->escapeAmpersands($name));
 				}
-			}
-			foreach ($item->children() as $child) {
-				if ($child->getName() == "id") {
-					$reg_obj = $this->rifcs->addChild("registryObject");
-					$reg_obj->addAttribute("group","EPrints");
-					$reg_obj->key = $this->escapeAmpersands($child);
-					$reg_obj->originatingSource = $this->escapeAmpersands($output_nodes["key"]);
-					$party = $reg_obj->addChild("party");
-					$party->addAttribute("type","person");
-					$party->addChild("name")->namePart = $this->escapeAmpersands($name);
-					$rel_obj = $party->addChild("relatedObject");
-					$rel_obj->key = $output_nodes["key"];
-					$rel_obj->addChild("relation")->addAttribute("type","isCollectorOf");
+				elseif ($child->getName() == "id") {
+					$id = $this->escapeAmpersands($child);
 				}
+			}
+			if ($id != null) {
+				$reg_obj = $this->rifcs->addChild("registryObject");
+				$reg_obj->addAttribute("group","EPrints");
+				$reg_obj->key = $id;
+				$reg_obj->originatingSource = $this->escapeAmpersands($output_nodes["key"]);
+				$party = $reg_obj->addChild("party");
+				$party->addAttribute("type","person");
+				$party->addChild("name")->namePart = $this->escapeAmpersands($name);
+				$rel_obj = $party->addChild("relatedObject");
+				$rel_obj->key = $output_nodes["key"];
+				$rel_obj->addChild("relation")->addAttribute("type","isCollectorOf");
 			}
 		}
 	}
@@ -244,5 +248,19 @@ class EprintsToRifcs extends Crosswalk {
 	
 	private function escapeAmpersands($string){
 		return str_replace("&", "&amp;", $string);
+	}
+	
+	private function isUrl($string){
+		//regex from https://gist.github.com/gruber/8891611
+		$match = preg_match(
+			"#(?i)\b((?:https?:(?:/{1,3}|[a-z0-9%])|[a-z0-9.\-]+[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)/)(?:[^\s()<>{}\[\]]+|\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\))+(?:\([^\s()]*?\([^\s()]+\)[^\s()]*?\)|\([^\s]+?\)|[^\s`!()\[\]{};:'\".,<>?«»“”‘’])|(?:(?<!@)[a-z0-9]+(?:[.\-][a-z0-9]+)*[.](?:com|net|org|edu|gov|mil|aero|asia|biz|cat|coop|info|int|jobs|mobi|museum|name|post|pro|tel|travel|xxx|ac|ad|ae|af|ag|ai|al|am|an|ao|aq|ar|as|at|au|aw|ax|az|ba|bb|bd|be|bf|bg|bh|bi|bj|bm|bn|bo|br|bs|bt|bv|bw|by|bz|ca|cc|cd|cf|cg|ch|ci|ck|cl|cm|cn|co|cr|cs|cu|cv|cx|cy|cz|dd|de|dj|dk|dm|do|dz|ec|ee|eg|eh|er|es|et|eu|fi|fj|fk|fm|fo|fr|ga|gb|gd|ge|gf|gg|gh|gi|gl|gm|gn|gp|gq|gr|gs|gt|gu|gw|gy|hk|hm|hn|hr|ht|hu|id|ie|il|im|in|io|iq|ir|is|it|je|jm|jo|jp|ke|kg|kh|ki|km|kn|kp|kr|kw|ky|kz|la|lb|lc|li|lk|lr|ls|lt|lu|lv|ly|ma|mc|md|me|mg|mh|mk|ml|mm|mn|mo|mp|mq|mr|ms|mt|mu|mv|mw|mx|my|mz|na|nc|ne|nf|ng|ni|nl|no|np|nr|nu|nz|om|pa|pe|pf|pg|ph|pk|pl|pm|pn|pr|ps|pt|pw|py|qa|re|ro|rs|ru|rw|sa|sb|sc|sd|se|sg|sh|si|sj|Ja|sk|sl|sm|sn|so|sr|ss|st|su|sv|sx|sy|sz|tc|td|tf|tg|th|tj|tk|tl|tm|tn|to|tp|tr|tt|tv|tw|tz|ua|ug|uk|us|uy|uz|va|vc|ve|vg|vi|vn|vu|wf|ws|ye|yt|yu|za|zm|zw)\b/?(?!@)))#",
+			$string
+		);
+		if ($match == 1) {
+			return true;
+		}
+		else {
+			return false;
+		}		
 	}
 }
