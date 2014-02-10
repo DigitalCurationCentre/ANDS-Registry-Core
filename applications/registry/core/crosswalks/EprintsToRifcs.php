@@ -1,8 +1,8 @@
 <?php
 
-class EprintsToRifcs {
+class EprintsToRifcs extends Crosswalk {
 
-	const  RIFCS_WRAPPER="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n
+	const RIFCS_WRAPPER="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n
 		<registryObjects xmlns=\"http://ands.org.au/standards/rif-cs/registryObjects\"
 		xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"
 		xsi:schemaLocation=\"http://ands.org.au/standards/rif-cs/registryObjects
@@ -12,9 +12,9 @@ class EprintsToRifcs {
 	private $rifcs = null;
 	
 	function __construct(){
-		$this->rifcs =  simplexml_load_string($this::RIFCS_WRAPPER);
+		$this->rifcs = simplexml_load_string($this::RIFCS_WRAPPER);
 	}
-
+	
 	public function identify(){
 		return "EPrints ReCollect to RIF-CS (Experimental)";
 	}
@@ -42,21 +42,13 @@ class EprintsToRifcs {
 	
 	public function payloadToRIFCS($payload){
 		$this->load_payload($payload);
-		$reg_obj = $this->rifcs->addChild("registryObject");
-		$reg_obj->addAttribute("group", "EPrints");
-		$reg_obj->addChild("key",$this->generateRandomString());
-		$reg_obj->addChild("originatingSource",$this->generateRandomString());
-		$repo = $reg_obj->addChild("collection");
-		$repo->addAttribute("type", "repository");
 		foreach ($this->eprints->children() as $eprint){
 			$reg_obj = $this->rifcs->addChild("registryObject");
 			$reg_obj->addAttribute("group", "EPrints");
-			$rel_obj = $repo->addChild("relatedObject");
 			foreach ($eprint->attributes() as $attribute => $value){
 				if ($attribute == "id") {
-					$rel_obj->addChild("key",$value);
-					$reg_obj->addChild("key",$value);
-					$reg_obj->addChild("originatingSource",$value);
+					$reg_obj->addChild("key",$this->escapeAmpersands($value));
+					$reg_obj->addChild("originatingSource",$this->escapeAmpersands($value));
 					break;
 				}
 			}
@@ -65,11 +57,10 @@ class EprintsToRifcs {
 			$citation = $coll->addChild("citationInfo");
 			$citation_metadata = $citation->addChild("citationMetadata");
 			$coverage = $coll->addChild("coverage");
-			$rel_obj->addChild("relation")->addAttribute("type", "isLocatedIn");
 			foreach ($eprint->children() as $node){
 				$func = "process_".$node->getName();
 				if (is_callable(array($this, $func))){
-					call_user_func(array($this, $func),$node,$coll,$citation_metadata,$coverage);
+					call_user_func(array($this, $func),$node,array("collection" => $coll, "citation_metadata" => $citation_metadata, "coverage" => $coverage));
 				}
 			}
 		}
@@ -78,95 +69,95 @@ class EprintsToRifcs {
 	
 	private function load_payload($payload){
 		if ($this->eprints == null) {
-			$this -> eprints =  simplexml_load_string($payload);
+			$this->eprints = simplexml_load_string($payload);
 		}
 	}
 	
-	private function process_datestamp($node,$coll,$citation_metadata,$coverage){
-		$coll->addAttribute("dateAccessioned", $node);
-		$this->addDate($coll,"dc.dateSubmitted",$node);
+	private function process_datestamp($input_node,$output_nodes){
+		$output_nodes["collection"]->addAttribute("dateAccessioned", $input_node);
+		$this->addDate($output_nodes["collection"],"dc.dateSubmitted",$input_node);
 	}
 	
-	private function process_id_number($node,$coll,$citation_metadata,$coverage){
-		$coll->addChild("identifier", $node)->addAttribute("type", "local");
-		$url = $coll->addChild("location")->addChild("address")->addChild("electronic");
+	private function process_id_number($input_node,$output_nodes){
+		$output_nodes["collection"]->addChild("identifier", $this->escapeAmpersands($input_node))->addAttribute("type", "local");
+		$url = $output_nodes["collection"]->addChild("location")->addChild("address")->addChild("electronic");
 		$url->addAttribute("type","url");
-		$url->addChild("value",$node);
-		$citation_metadata->addChild("identifier", $node);
-		$citation_metadata->addChild("url", $node);
+		$url->addChild("value",$this->escapeAmpersands($input_node));
+		$output_nodes["citation_metadata"]->addChild("identifier", $this->escapeAmpersands($input_node))->addAttribute("type", "local");
+		$output_nodes["citation_metadata"]->addChild("url", $this->escapeAmpersands($input_node));
 	}
 	
-	private function process_title($node,$coll,$citation_metadata,$coverage){
-		$name = $coll->addChild("name");
+	private function process_title($input_node,$output_nodes){
+		$name = $output_nodes["collection"]->addChild("name");
 		$name->addAttribute("type","primary");
-		$name->addChild("namePart",$node);
-		$citation_metadata->addChild("title",$node);
+		$name->addChild("namePart", $this->escapeAmpersands($input_node));
+		$output_nodes["citation_metadata"]->addChild("title", $this->escapeAmpersands($input_node));
 	}
 	
-	private function process_alt_title($node,$coll,$citation_metadata,$coverage){
-		$name = $coll->addChild("name");
+	private function process_alt_title($input_node,$output_nodes){
+		$name = $output_nodes["collection"]->addChild("name");
 		$name->addAttribute("type","alternative");
-		$name->addChild("namePart",$node);
+		$name->addChild("namePart", $this->escapeAmpersands($input_node));
 	}
 	
-	private function process_date_embargo($node,$coll,$citation_metadata,$coverage){
-		$this->addDate($coll,"dc.available",$node);
-		$citation_date = $citation_metadata->addChild("date",$node);
+	private function process_date_embargo($input_node,$output_nodes){
+		$this->addDate($output_nodes["collection"],"dc.available",$input_node);
+		$citation_date = $output_nodes["citation_metadata"]->addChild("date", $this->escapeAmpersands($input_node));
 		$citation_date->setAttribute("type","available");
 	}
 	
-	private function process_collection_date($node,$coll,$citation_metadata,$coverage){
-		$this->addDate($coll,"dc.created",$node);
+	private function process_collection_date($input_node,$output_nodes){
+		$this->addDate($output_nodes["collection"],"dc.created",$input_node);
 	}
 	
-	private function process_revision($node,$coll,$citation_metadata,$coverage){
-		$this->addDate($coll,"dc.issued",$node);
-		$citation_metadata->addChild("version",$node);
-		$pub_date = $citation_metadata->addChild("date",$node);
+	private function process_revision($input_node,$output_nodes){
+		$this->addDate($output_nodes["collection"],"dc.issued",$input_node);
+		$output_nodes["citation_metadata"]->addChild("version", $this->escapeAmpersands($input_node));
+		$pub_date = $output_nodes["citation_metadata"]->addChild("date", $this->escapeAmpersands($input_node));
 		$pub_date->addAttribute("type","publicationDate,issued");
 	}
 	
-	private function process_keywords($node,$coll,$citation_metadata,$coverage){
-		$subject = $coll->addChild("subject", $node);
+	private function process_keywords($input_node,$output_nodes){
+		$subject = $output_nodes["collection"]->addChild("subject", $this->escapeAmpersands($input_node));
 		$subject->addAttribute("type","local");
 	}
 	
-	private function process_subjects($node,$coll,$citation_metadata,$coverage){//items
-		foreach ($node->children() as $item) {
-			$subject = $coll->addChild("subject", $item->textContent);
+	private function process_subjects($input_node,$output_nodes){//items
+		foreach ($input_node->children() as $item) {
+			$subject = $output_nodes["collection"]->addChild("subject", $this->escapeAmpersands($item));
 			$subject->addAttribute("type","local");
 		}
 	}
 	
-	private function process_abstract($node,$coll,$citation_metadata,$coverage){
-		$this->addDescription($coll,"full",$node);
+	private function process_abstract($input_node,$output_nodes){
+		$this->addDescription($output_nodes["collection"],"full",$input_node);
 	}
 	
-	private function process_provenance($node,$coll,$citation_metadata,$coverage){
-		$this->addDescription($coll,"lineage",$node);
+	private function process_provenance($input_node,$output_nodes){
+		$this->addDescription($output_nodes["collection"],"lineage",$input_node);
 	}
 	
-	private function process_note($node,$coll,$citation_metadata,$coverage){
-		$this->addDescription($coll,"note",$node);
+	private function process_note($input_node,$output_nodes){
+		$this->addDescription($output_nodes["collection"],"note",$input_node);
 	}
 	
-	private function process_temporal_cover($node,$coll,$citation_metadata,$coverage){
-		$coverage->addChild("temporal")->addChild("date",$node);
+	private function process_temporal_cover($input_node,$output_nodes){
+		$output_nodes["coverage"]->addChild("temporal")->addChild("date",$this->escapeAmpersands($input_node));
 	}
 	
-	private function process_geographic_cover($node,$coll,$citation_metadata,$coverage){	
-		$coverage->addChild("spatial",$node)->addAttribute("type","text");
+	private function process_geographic_cover($input_node,$output_nodes){	
+		$output_nodes["coverage"]->addChild("spatial",$this->escapeAmpersands($input_node))->addAttribute("type","text");
 	}
 	
-	private function process_bounding_box($node,$coll,$citation_metadata,$coverage){
-		$coverage->addChild("spatial",$node)->addAttribute("type","iso19139dcmiBox");
+	private function process_bounding_box($input_node,$output_nodes){
+		$output_nodes["coverage"]->addChild("spatial",$this->escapeAmpersands($input_node))->addAttribute("type","iso19139dcmiBox");
 	}
 	
-	private function process_related_resources($node,$coll){
-		$related_info = $coll->addChild("relatedInfo");
+	private function process_related_resources($input_node,$output_nodes){
+		$related_info = $output_nodes["collection"]->addChild("relatedInfo");
 		$related_info->addAttribute("type","collection");
-		$related_info->addChild("identifier",$node);
-		foreach ($node->children() as $child) {
+		$related_info->addChild("identifier",$this->escapeAmpersands($input_node))->addAttribute("type", "local");
+		foreach ($input_node->children() as $child) {
 			if ($child->getName() == "relationType") {
 				$relation = $related_info->addChild("relation");
 				$relation->addAttribute("type",$child->textContent);
@@ -174,24 +165,24 @@ class EprintsToRifcs {
 		}
 	}
 	
-	private function process_security($node,$coll,$citation_metadata,$coverage){
-		$coll->addChild("rights")->addChild("accessRights",$node);
+	private function process_security($input_node,$output_nodes){
+		$output_nodes["collection"]->addChild("rights")->addChild("accessRights",$this->escapeAmpersands($input_node));
 	}
 	
-	private function process_restrictions($node,$coll,$citation_metadata,$coverage){
-		$coll->addChild("rights")->addChild("accessRights",$node);
+	private function process_restrictions($input_node,$output_nodes){
+		$output_nodes["collection"]->addChild("rights")->addChild("accessRights",$this->escapeAmpersands($input_node));
 	}
 	
-	private function process_accessLimitations($node,$coll,$citation_metadata,$coverage){
-		$coll->addChild("rights")->addChild("accessRights",$node);
+	private function process_accessLimitations($input_node,$output_nodes){
+		$output_nodes["collection"]->addChild("rights")->addChild("accessRights",$this->escapeAmpersands($input_node));
 	}
 	
-	private function process_license($node,$coll,$citation_metadata,$coverage){
-		$coll->addChild("rights")->addChild("licence",$node);
+	private function process_license($input_node,$output_nodes){
+		$output_nodes["collection"]->addChild("rights")->addChild("licence",$this->escapeAmpersands($input_node));
 	}
 	
-	private function process_creators($node,$coll,$citation_metadata,$coverage){
-		foreach ($node->children() as $item) {
+	private function process_creators($input_node,$output_nodes){
+		foreach ($input_node->children() as $item) {
 			foreach ($item->children() as $child) {
 				if ($child->getName() == "name") {
 					$name = "";
@@ -199,35 +190,30 @@ class EprintsToRifcs {
 						$name = $name.$name_part." ";
 					}
 					$name = trim($name);
-					$citation_metadata->addChild("contributor")->addChild("namePart", $name);
+					$output_nodes["citation_metadata"]->addChild("contributor")->addChild("namePart", $this->escapeAmpersands($name));
 				}
 			}
 		}
 	}
 	
-	private function process_publisher($node,$coll,$citation_metadata,$coverage){
-		$citation_metadata->addChild("publisher",$node);
+	private function process_publisher($input_node,$output_nodes){
+		$output_nodes["citation_metadata"]->addChild("publisher",$this->escapeAmpersands($input_node));
 	}
 	
-	private function addDate($coll,$type,$value){
-		$dates = $coll->addChild("dates");
+	private function addDate($collection,$type,$value){
+		$dates = $collection->addChild("dates");
 		$dates->addAttribute("type", $type);
-		$dates_date = $dates->addChild("date",$value);
+		$dates_date = $dates->addChild("date",$this->escapeAmpersands($value));
 		$dates_date->addAttribute("type", "dateFrom");
 		$dates_date->addAttribute("dateFormat", "W3CDTF");
 	}
 	
-	private function addDescription($coll,$type,$value){
-		$description = $coll->addChild("description", $value);
+	private function addDescription($collection,$type,$value){
+		$description = $collection->addChild("description", $this->escapeAmpersands($value));
 		$description->addAttribute("type",$type);
 	}
 	
-	private function generateRandomString($length = 16) {
-    $characters = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    $randomString = '';
-    for ($i = 0; $i < $length; $i++) {
-        $randomString .= $characters[rand(0, strlen($characters) - 1)];
-    }
-    return $randomString;
+	private function escapeAmpersands($string){
+		return str_replace("&", "&amp;", $string);
 	}
 }
