@@ -45,9 +45,10 @@ class EprintsToRifcs extends Crosswalk {
 		foreach ($this->eprints->children() as $eprint){
 			$reg_obj = $this->rifcs->addChild("registryObject");
 			$reg_obj->addAttribute("group", "EPrints");
+			$key = null;
 			foreach ($eprint->attributes() as $attribute => $value){
 				if ($attribute == "id") {
-					$reg_obj->addChild("key",$this->escapeAmpersands($value));
+					$key = $reg_obj->addChild("key",$this->escapeAmpersands($value));
 					$reg_obj->addChild("originatingSource",$this->escapeAmpersands($value));
 					break;
 				}
@@ -60,7 +61,17 @@ class EprintsToRifcs extends Crosswalk {
 			foreach ($eprint->children() as $node){
 				$func = "process_".$node->getName();
 				if (is_callable(array($this, $func))){
-					call_user_func(array($this, $func),$node,array("collection" => $coll, "citation_metadata" => $citation_metadata, "coverage" => $coverage));
+					call_user_func(
+						array($this, $func),
+						$node,
+						array(
+							"registry_object" => $reg_obj,
+							"key" => $key,
+							"collection" => $coll,
+							"citation_metadata" => $citation_metadata,
+							"coverage" => $coverage
+						)
+					);
 				}
 			}
 		}
@@ -183,14 +194,32 @@ class EprintsToRifcs extends Crosswalk {
 	
 	private function process_creators($input_node,$output_nodes){
 		foreach ($input_node->children() as $item) {
+			$name = "";
 			foreach ($item->children() as $child) {
 				if ($child->getName() == "name") {
-					$name = "";
 					foreach ($child->children() as $name_part) {
-						$name = $name.$name_part." ";
+						if ($name_part->getName() == "given") {
+							$name = $this->escapeAmpersands($name_part)." ".$name;
+						}
+						elseif ($name_part->getName() == "family") {
+							$name = $name.$this->escapeAmpersands($name_part);
+						}
 					}
-					$name = trim($name);
 					$output_nodes["citation_metadata"]->addChild("contributor")->addChild("namePart", $this->escapeAmpersands($name));
+				}
+			}
+			foreach ($item->children() as $child) {
+				if ($child->getName() == "id") {
+					$reg_obj = $this->rifcs->addChild("registryObject");
+					$reg_obj->addAttribute("group","EPrints");
+					$reg_obj->key = $this->escapeAmpersands($child);
+					$reg_obj->originatingSource = $this->escapeAmpersands($output_nodes["key"]);
+					$party = $reg_obj->addChild("party");
+					$party->addAttribute("type","person");
+					$party->addChild("name")->namePart = $this->escapeAmpersands($name);
+					$rel_obj = $party->addChild("relatedObject");
+					$rel_obj->key = $output_nodes["key"];
+					$rel_obj->addChild("relation")->addAttribute("type","isCollectorOf");
 				}
 			}
 		}
