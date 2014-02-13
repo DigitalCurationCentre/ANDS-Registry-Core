@@ -158,7 +158,6 @@ class Ddi2p5ToRifcs extends Crosswalk {
 				break;
 			}
 		}
-		$output_nodes["collection"]->addAttribute("dateAccessioned", $input_node->distStmt->depDate["date"]);
 	}
 	
 	private function process_rspStmt($input_node, $output_nodes){
@@ -182,7 +181,38 @@ class Ddi2p5ToRifcs extends Crosswalk {
 		}
 	}
 	
-	private function process_distStmt($input_node,$output_nodes){
+	private function process_distStmt($input_node, $output_nodes){
+		foreach ($input_node->children() as $stmt) {
+			switch ($stmt->getName()) {
+			case "depDate":
+				$output_nodes["collection"]->addAttribute("dateAccessioned", $stmt["date"]);
+				$dateSubmitted = $output_nodes["collection"]->addChild("dates");
+				$dateSubmitted->addAttribute("type", "dc.dateSubmitted");
+				$dateSubmittedFrom = $dateSubmitted->addChild("date", $stmt["date"]);
+				$dateSubmittedFrom->addAttribute("type", "dateFrom");
+				$citeSubmitted = $output_nodes["citation_metadata"]->addChild("date", $stmt);
+				$citeSubmitted->addAttribute("type", "dateSubmitted");
+				break;
+			case "distDate":
+				$dateAvailable = $output_nodes["collection"]->addChild("dates");
+				$dateAvailable->addAttribute("type", "dc.available");
+				$dateAvailableFrom = $dateAvailable->addChild("date", $stmt["date"]);
+				$dateAvailableFrom->addAttribute("type", "dateFrom");
+				$dateIssued = $output_nodes["collection"]->addChild("dates");
+				$dateIssued->addAttribute("type", "dc.issued");
+				$dateIssuedFrom = $dateIssued->addChild("date", $stmt["date"]);
+				$dateIssuedFrom->addAttribute("type", "dateFrom");
+				$citePublished = $output_nodes["citation_metadata"]->addChild("date", $stmt);
+				$citePublished->addAttribute("type", "publicationDate");
+				$citeAvailable = $output_nodes["citation_metadata"]->addChild("date", $stmt);
+				$citeAvailable->addAttribute("type", "available");
+				$citeIssued = $output_nodes["citation_metadata"]->addChild("date", $stmt);
+				$citeIssued->addAttribute("type", "issued");
+				break;
+			case "distrbtr":
+				$output_nodes["citation_metadata"]->addChild("publisher", $stmt);
+			}
+		}
 	}
 	
 	private function process_verStmt($input_node,$output_nodes){
