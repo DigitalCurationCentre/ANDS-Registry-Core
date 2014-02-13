@@ -216,9 +216,21 @@ class Ddi2p5ToRifcs extends Crosswalk {
 	}
 	
 	private function process_verStmt($input_node,$output_nodes){
+		foreach ($input_node->children() as $stmt) {
+			switch ($stmt->getName()) {
+			case "version":
+				$output_nodes["citation_metadata"]->addChild("version", $stmt);
+				break;
+			}
+		}
 	}
 	
 	private function process_holdings($input_node,$output_nodes){
+		foreach ($input_node->attributes() as $attrib => $value) {
+			if ($attrib == "URI") {
+				$output_nodes["citation_metadata"]->addChild("url", $value);
+			}
+		}
 	}
 	
 	private function process_subject($input_node,$output_nodes){
