@@ -65,7 +65,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 			$coll->addAttribute("type", "dataset");
 			$citation = $coll->addChild("citationInfo");
 			$citation_metadata = $citation->addChild("citationMetadata");
-			$coverage = $coll->addChild("coverage");
+			$rights = $coll->addChild("rights");
 			foreach ($record->metadata->codeBook->stdyDscr->children() as $node){
 				foreach ($node->children as $subnode) {
 					$func = "process_".$subnode->getName();
@@ -78,7 +78,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 								"key" => $key,
 								"collection" => $coll,
 								"citation_metadata" => $citation_metadata,
-								"coverage" => $coverage
+								"rights" => $rights
 							)
 						);
 					}
@@ -94,7 +94,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 		}
 	}
 	
-	private function addDate($collection,$type,$value){
+	private function addDate($collection, $type, $value){
 		$dates = $collection->addChild("dates");
 		$dates->addAttribute("type", $type);
 		$dates_date = $dates->addChild("date",CrosswalkHelper::escapeAmpersands($value));
@@ -102,12 +102,28 @@ class Ddi2p5ToRifcs extends Crosswalk {
 		$dates_date->addAttribute("dateFormat", "W3CDTF");
 	}
 	
-	private function addDescription($collection,$type,$value){
+	private function addDescription($collection, $type, $value){
 		$description = $collection->addChild("description", CrosswalkHelper::escapeAmpersands($value));
 		$description->addAttribute("type",$type);
 	}
 	
-	private function process_titlStmt($input_node,$output_nodes){
+	private function addName($output_node, $value) {
+		/*
+		 * It is rare but not impossible to have a double-barrelled surname with a
+		 * space instead of a dash (e.g. Ralph Vaughan Williams), so the following
+		 * is not entirely robust.
+		 */
+		if (preg_match("|^([-A-Za-z]+), ((?:[A-Z]\.[- ]?)*)|", $value, $matches)) {
+			$surname = $output_node->addChild("namePart", $matches[1]);
+			$surname->addAttribute("type", "family");
+			$initials = $output_node->addChild("namePart", $matches[2]);
+			$initials->addAttribute("type", "given");
+		} else {
+			$output_node->addChild("namePart", $value);
+		}
+	}
+	
+	private function process_titlStmt($input_node, $output_nodes){
 		foreach ($input_node->children() as $stmt) {
 			switch ($stmt->getName()) {
 			case "titl":
@@ -145,10 +161,25 @@ class Ddi2p5ToRifcs extends Crosswalk {
 		$output_nodes["collection"]->addAttribute("dateAccessioned", $input_node->distStmt->depDate["date"]);
 	}
 	
-	private function process_rspStmt($input_node,$output_nodes){
+	private function process_rspStmt($input_node, $output_nodes){
+		foreach ($input_node->children() as $stmt) {
+			switch ($stmt->getName()) {
+			case "AuthEnty":
+				$contrib = $output_nodes["citation_metadata"]->addChild("contributor");
+				addName($contrib, $stmt);
+				break;
+			}
+		}
 	}
 	
-	private function process_prodStmt($input_node,$output_nodes){
+	private function process_prodStmt($input_node, $output_nodes){
+		foreach ($input_node->children() as $stmt) {
+			switch ($stmt->getName()) {
+			case "copyright":
+				$output_nodes["rights"]->addChild("rightsStatement", $stmt);
+				break;
+			}
+		}
 	}
 	
 	private function process_distStmt($input_node,$output_nodes){
