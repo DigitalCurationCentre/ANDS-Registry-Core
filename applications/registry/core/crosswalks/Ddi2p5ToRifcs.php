@@ -188,22 +188,13 @@ class Ddi2p5ToRifcs extends Crosswalk {
 			switch ($stmt->getName()) {
 			case "depDate":
 				$output_nodes["collection"]->addAttribute("dateAccessioned", $stmt["date"]);
-				$dateSubmitted = $output_nodes["collection"]->addChild("dates");
-				$dateSubmitted->addAttribute("type", "dc.dateSubmitted");
-				$dateSubmittedFrom = $dateSubmitted->addChild("date", $stmt["date"]);
-				$dateSubmittedFrom->addAttribute("type", "dateFrom");
+				$this->addDate($output_nodes["collection"],"dc.dateSubmitted",$stmt["date"]);
 				$citeSubmitted = $output_nodes["citation_metadata"]->addChild("date", $stmt);
 				$citeSubmitted->addAttribute("type", "dateSubmitted");
 				break;
 			case "distDate":
-				$dateAvailable = $output_nodes["collection"]->addChild("dates");
-				$dateAvailable->addAttribute("type", "dc.available");
-				$dateAvailableFrom = $dateAvailable->addChild("date", $stmt["date"]);
-				$dateAvailableFrom->addAttribute("type", "dateFrom");
-				$dateIssued = $output_nodes["collection"]->addChild("dates");
-				$dateIssued->addAttribute("type", "dc.issued");
-				$dateIssuedFrom = $dateIssued->addChild("date", $stmt["date"]);
-				$dateIssuedFrom->addAttribute("type", "dateFrom");
+				$this->addDate($output_nodes["collection"],"dc.available",$stmt["date"]);
+				$this->addDate($output_nodes["collection"],"dc.issued",$stmt["date"]);
 				$citePublished = $output_nodes["citation_metadata"]->addChild("date", $stmt);
 				$citePublished->addAttribute("type", "publicationDate");
 				$citeAvailable = $output_nodes["citation_metadata"]->addChild("date", $stmt);
@@ -261,6 +252,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 	}
 	
 	private function process_abstract($input_node, $output_nodes){
+		$this->addDescription($output_nodes["collection"], "full", $input_node);
 	}
 	
 	private function process_sumDscr($input_node, $output_nodes){
