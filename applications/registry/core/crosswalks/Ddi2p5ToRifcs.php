@@ -65,6 +65,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 			$coll->addAttribute("type", "dataset");
 			$citation = $coll->addChild("citationInfo");
 			$citation_metadata = $citation->addChild("citationMetadata");
+			$coverage = $coll->addChild("coverage");
 			$rights = $coll->addChild("rights");
 			foreach ($record->metadata->codeBook->stdyDscr->children() as $node){
 				foreach ($node->children as $subnode) {
@@ -78,6 +79,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 								"key" => $key,
 								"collection" => $coll,
 								"citation_metadata" => $citation_metadata,
+								"coverage" => $coverage,
 								"rights" => $rights
 							)
 						);
@@ -136,12 +138,12 @@ class Ddi2p5ToRifcs extends Crosswalk {
 				$altName->addAttribute("type", "alternative");
 				break;
 			case "IDNo":
-				if ($stmt["agency"] == "datacite") {
+				if (isset($stmt["agency"]) && (string) $stmt["agency"] == "datacite") {
 					$idNo = $output_nodes["collection"]->addChild("identifier", $stmt);
 					$idNo->addAttribute("type", "doi");
 					$citIdNo = $output_nodes["citation_metadata"]->addChild("identifier", $stmt);
 					$citIdNo->addAttribute("type", "doi");
-				} elseif ($stmt["agency"] == "UKDA") {
+				} elseif (isset($stmt["agency"]) && (string) $stmt["agency"] == "UKDA") {
 					$idNo = $output_nodes["collection"]->addChild("identifier", "sn" . $stmt);
 					$idNo->addAttribute("type", "local");
 					$relInfo = $output_nodes["collection"]->addChild("relatedInfo");
@@ -215,7 +217,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 		}
 	}
 	
-	private function process_verStmt($input_node,$output_nodes){
+	private function process_verStmt($input_node, $output_nodes){
 		foreach ($input_node->children() as $stmt) {
 			switch ($stmt->getName()) {
 			case "version":
@@ -225,7 +227,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 		}
 	}
 	
-	private function process_holdings($input_node,$output_nodes){
+	private function process_holdings($input_node, $output_nodes){
 		foreach ($input_node->attributes() as $attrib => $value) {
 			if ($attrib == "URI") {
 				$output_nodes["citation_metadata"]->addChild("url", $value);
@@ -233,33 +235,54 @@ class Ddi2p5ToRifcs extends Crosswalk {
 		}
 	}
 	
-	private function process_subject($input_node,$output_nodes){
+	private function process_subject($input_node, $output_nodes){
+		foreach ($input_node->children() as $subj) {
+			switch ($subj->getName()) {
+			case "keyword":
+				if (isset($subj["vocab"])) {
+					if ((string) $subj["vocab"] == "S") {
+						$term = $output_nodes["collection"]->addChild("subject", $subj);
+						$term->addAttribute("type", "hassett");
+						if (isset($subj["vocabURI"])) {
+							$term->addAttribute("termIdentifier", $subj["vocabURI"]);
+						}
+					} elseif ((string) $subj["vocab"] == "G") {
+						$spatial = $output_nodes["coverage"]->addChild("spatial", $subj);
+						$spatial->addAttribute("type", "text");
+					}
+				}
+				break;
+			case "topClas":
+				$term = $output_nodes["collection"]->addChild("subject", $subj);
+				$term->addAttribute("type", "ukdasc");
+				break;
+			}
+		}
 	}
 	
-	private function process_abstract($input_node,$output_nodes){
+	private function process_abstract($input_node, $output_nodes){
 	}
 	
-	private function process_sumDscr($input_node,$output_nodes){
+	private function process_sumDscr($input_node, $output_nodes){
 	}
 	
-	private function process_dataColl($input_node,$output_nodes){
+	private function process_dataColl($input_node, $output_nodes){
 	}
 	
-	private function process_setAvail($input_node,$output_nodes){
+	private function process_setAvail($input_node, $output_nodes){
 	}
 	
-	private function process_useStmt($input_node,$output_nodes){
+	private function process_useStmt($input_node, $output_nodes){
 	}
 	
-	private function process_relStdy($input_node,$output_nodes){
+	private function process_relStdy($input_node, $output_nodes){
 	}
 	
-	private function process_relPubl($input_node,$output_nodes){
+	private function process_relPubl($input_node, $output_nodes){
 	}
 	
-	private function process_othRefs($input_node,$output_nodes){
+	private function process_othRefs($input_node, $output_nodes){
 	}
-
 }
 
 ?>
