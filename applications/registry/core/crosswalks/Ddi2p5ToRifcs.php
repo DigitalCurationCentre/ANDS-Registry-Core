@@ -51,13 +51,13 @@ class Ddi2p5ToRifcs extends Crosswalk {
 	
 	public function payloadToRIFCS($payload){
 		$this->load_payload($payload);
-		foreach ($this->oaipmh->ListRecords as $record){
+		foreach ($this->oaipmh->ListRecords->children() as $record){
 			if ($record->getName() != "record") {
 				continue;
 			}
 			$reg_obj = $this->rifcs->addChild("registryObject");
-			if (array_key_exists($this->oaipmh->request, $this->ddiProviders)) {
-				$reg_obj->addAttribute("group", $this->ddiProviders[$this->oaipmh->request]);
+			if (array_key_exists((string) $this->oaipmh->request, $this->ddiProviders)) {
+				$reg_obj->addAttribute("group", $this->ddiProviders[(string) $this->oaipmh->request]);
 			}
 			$key = $reg_obj->addChild("key", $record->header->identifier);
 			$originatingSource = $reg_obj->addChild("originatingSource", $this->oaipmh->request);
@@ -68,7 +68,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 			$coverage = $coll->addChild("coverage");
 			$rights = $coll->addChild("rights");
 			foreach ($record->metadata->codeBook->stdyDscr->children() as $node){
-				foreach ($node->children as $subnode) {
+				foreach ($node->children() as $subnode) {
 					$func = "process_".$subnode->getName();
 					if (is_callable(array($this, $func))){
 						call_user_func(
@@ -129,8 +129,9 @@ class Ddi2p5ToRifcs extends Crosswalk {
 		foreach ($input_node->children() as $stmt) {
 			switch ($stmt->getName()) {
 			case "titl":
-				$name = $output_nodes["collection"]->addChild("name", $stmt);
+				$name = $output_nodes["collection"]->addChild("name");
 				$name->addAttribute("type", "primary");
+				$name->addChild("namePart", $stmt);
 				$output_nodes["citation_metadata"]->addChild("title", $stmt);
 				break;
 			case "altTitl":
@@ -167,7 +168,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 			switch ($stmt->getName()) {
 			case "AuthEnty":
 				$contrib = $output_nodes["citation_metadata"]->addChild("contributor");
-				addName($contrib, $stmt);
+				$this->addName($contrib, $stmt);
 				break;
 			}
 		}
@@ -221,6 +222,11 @@ class Ddi2p5ToRifcs extends Crosswalk {
 	private function process_holdings($input_node, $output_nodes){
 		foreach ($input_node->attributes() as $attrib => $value) {
 			if ($attrib == "URI") {
+				$loc = $output_nodes["collection"]->addChild("location");
+				$addr = $loc->addChild("address");
+				$elec = $addr->addChild("electronic");
+				$elec->addAttribute("type", "url");
+				$elec->addChild("value", $value);
 				$output_nodes["citation_metadata"]->addChild("url", $value);
 				break;
 			}
@@ -244,7 +250,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 					}
 				}
 				break;
-			case "topClas":
+			case "topcClas":
 				$term = $output_nodes["collection"]->addChild("subject", $subj);
 				$term->addAttribute("type", "ukdasc");
 				break;
@@ -290,7 +296,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 			case "geogCover":
 			case "geogUnit":
 			case "nation":
-				$spatial = $output_nodes["coverage"]->addChild("spatial", $subj);
+				$spatial = $output_nodes["coverage"]->addChild("spatial", $dscr);
 				$spatial->addAttribute("type", "text");
 				break;
 			}
