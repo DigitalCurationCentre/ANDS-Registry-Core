@@ -56,7 +56,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 				continue;
 			}
 			$reg_obj = $this->rifcs->addChild("registryObject");
-			if (array_key_exists($this->oaipmh->request, $this->ddiProviders) {
+			if (array_key_exists($this->oaipmh->request, $this->ddiProviders)) {
 				$reg_obj->addAttribute("group", $this->ddiProviders[$this->oaipmh->request]);
 			}
 			$key = $reg_obj->addChild("key", $record->header->identifier);
@@ -334,13 +334,8 @@ class Ddi2p5ToRifcs extends Crosswalk {
 		}
 	}
 	
-	private function process_relStdy($input_node, $output_nodes){
-	}
-	
 	private function process_relPubl($input_node, $output_nodes){
-	}
-	
-	private function process_othRefs($input_node, $output_nodes){
+		//Need to write citation parser to interpret this...
 	}
 }
 
