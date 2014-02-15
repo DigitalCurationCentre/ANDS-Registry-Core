@@ -222,6 +222,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 		foreach ($input_node->attributes() as $attrib => $value) {
 			if ($attrib == "URI") {
 				$output_nodes["citation_metadata"]->addChild("url", $value);
+				break;
 			}
 		}
 	}
@@ -256,15 +257,81 @@ class Ddi2p5ToRifcs extends Crosswalk {
 	}
 	
 	private function process_sumDscr($input_node, $output_nodes){
-	}
-	
-	private function process_dataColl($input_node, $output_nodes){
-	}
-	
-	private function process_setAvail($input_node, $output_nodes){
+		//Dates need to be collected before written out to RIF-CS
+		$periods = array();
+		foreach ($input_node->children() as $dscr) {
+			switch ($dscr->getName()) {
+			case "collDate":
+				if (isset($dscr["event"]) && isset($dscr["date"])) {
+					switch ((string) $dscr["event"]) {
+					case "single":
+					case "start":
+						$periods["collected"]["from"] = (string) $dscr["date"];
+						break;
+					case "end":
+						$periods["collected"]["to"] = (string) $dscr["date"];
+						break;
+					}
+				}
+				break;
+			case "timePrd":
+				if (isset($dscr["event"]) && isset($dscr["date"])) {
+					switch ((string) $dscr["event"]) {
+					case "single":
+					case "start":
+						$periods["originated"]["from"] = (string) $dscr["date"];
+						break;
+					case "end":
+						$periods["originated"]["to"] = (string) $dscr["date"];
+						break;
+					}
+				}
+				break;
+			case "geogCover":
+			case "geogUnit":
+			case "nation":
+				$spatial = $output_nodes["coverage"]->addChild("spatial", $subj);
+				$spatial->addAttribute("type", "text");
+				break;
+			}
+		}
+		if (isset($periods["collected"])) {
+			$collected = $output_nodes["coverage"]->addChild("temporal");
+			if (isset($periods["collected"]["from"])) {
+				$collDateFrom = $collected->addChild("date", $periods["collected"]["from"]);
+				$collDateFrom->addAttribute("type", "dateFrom");
+				$collDateFrom->addAttribute("dateFormat", "W3CDTF");
+			}
+			if (isset($periods["collected"]["to"])) {
+				$collDateTo = $collected->addChild("date", $periods["collected"]["to"]);
+				$collDateTo->addAttribute("type", "dateTo");
+				$collDateTo->addAttribute("dateFormat", "W3CDTF");
+			}
+		}
+		if (isset($periods["originated"])) {
+			$originated = $output_nodes["coverage"]->addChild("temporal");
+			if (isset($periods["originated"]["from"])) {
+				$origDateFrom = $originated->addChild("date", $periods["originated"]["from"]);
+				$origDateFrom->addAttribute("type", "dateFrom");
+				$origDateFrom->addAttribute("dateFormat", "W3CDTF");
+			}
+			if (isset($periods["originated"]["to"])) {
+				$origDateTo = $originated->addChild("date", $periods["originated"]["to"]);
+				$origDateTo->addAttribute("type", "dateTo");
+				$origDateTo->addAttribute("dateFormat", "W3CDTF");
+			}
+		}
 	}
 	
 	private function process_useStmt($input_node, $output_nodes){
+		foreach ($input_node->children() as $stmt) {
+			switch ($stmt->getName()) {
+			case "restrctn":
+			case "conditions":
+				$output_nodes["rights"]->addChild("accessRights", $stmt);
+				break;
+			}
+		}
 	}
 	
 	private function process_relStdy($input_node, $output_nodes){
