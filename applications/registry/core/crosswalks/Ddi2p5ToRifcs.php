@@ -63,6 +63,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 			$originatingSource = $reg_obj->addChild("originatingSource", $this->oaipmh->request);
 			$coll = $reg_obj->addChild("collection");
 			$coll->addAttribute("type", "dataset");
+			$coll->addAttribute("dateModified", date(DATE_W3C));
 			$citation = $coll->addChild("citationInfo");
 			$citation_metadata = $citation->addChild("citationMetadata");
 			$coverage = $coll->addChild("coverage");
@@ -109,19 +110,71 @@ class Ddi2p5ToRifcs extends Crosswalk {
 		$description->addAttribute("type",$type);
 	}
 	
-	private function addName($output_node, $value) {
+	private function addName($name, $value, $output_nodes = null) {
+		// Passing $output_nodes means a relatedObject is required.
+		$contributor = isset($output_nodes);
+		$id = sha1($value);
+		if ($contributor) {
+			$ctrb_obj = null;
+			$ctrb_party = null;
+			$new_ctrb = true;
+			foreach ($this->rifcs->children() as $object) {
+				if ((string) $object->key == $id) {
+					$ctrb_obj = $object;
+					$ctrb_party = $object->party;
+					$new_ctrb = false;
+					break;
+				}
+			}
+			if ($ctrb_obj === null) {
+				$ctrb_obj = $this->rifcs->addChild("registryObject");
+				if (array_key_exists((string) $this->oaipmh->request, $this->ddiProviders)) {
+					$ctrb_obj->addAttribute("group", $this->ddiProviders[(string) $this->oaipmh->request]);
+				}
+				$ctrb_obj->addChild("key", $id);
+				$ctrb_obj->addChild("originatingSource", $this->oaipmh->request);
+				$ctrb_party = $ctrb_obj->addChild("party");
+				$ctrb_party->addAttribute("dateModified", date(DATE_W3C));
+			}
+		}
 		/*
 		 * It is rare but not impossible to have a double-barrelled surname with a
 		 * space instead of a dash (e.g. Ralph Vaughan Williams), so the following
 		 * is not entirely robust.
 		 */
 		if (preg_match("|^([-A-Za-z]+), ((?:[A-Z]\.[- ]?)*)|", $value, $matches)) {
-			$surname = $output_node->addChild("namePart", $matches[1]);
+			$surname = $name->addChild("namePart", $matches[1]);
 			$surname->addAttribute("type", "family");
-			$initials = $output_node->addChild("namePart", $matches[2]);
+			$initials = $name->addChild("namePart", $matches[2]);
 			$initials->addAttribute("type", "given");
+			if ($contributor && $new_ctrb) {
+				$ctrb_party->addAttribute("type", "person");
+				$ctrb_name = $ctrb_party->addChild("name");
+				$ctrb_name->addAttribute("type", "primary");
+				$ctrb_surname = $ctrb_name->addChild("namePart", $matches[1]);
+				$ctrb_surname->addAttribute("type", "family");
+				$ctrb_initials = $ctrb_name->addChild("namePart", $matches[2]);
+				$ctrb_initials->addAttribute("type", "given");
+			}
 		} else {
-			$output_node->addChild("namePart", $value);
+			$name->addChild("namePart", $value);
+			if ($contributor && $new_ctrb) {
+				$ctrb_party->addAttribute("type", "group");
+				$ctrb_name = $ctrb_party->addChild("name");
+				$ctrb_name->addAttribute("type", "primary");
+				$ctrb_name->addChild("namePart", $value);
+			}
+		}
+		if ($contributor) {
+			$ctrb_rel_obj = $ctrb_party->addChild("relatedObject");
+			$ctrb_rel_obj->addChild("key", $output_nodes["key"]);
+			$ctrb_rel_obj_type = $ctrb_rel_obj->addChild("relation");
+			$ctrb_rel_obj_type->addAttribute("type", "isPrincipalInvestigatorOf");
+			$ctrb_party["dateModified"] = date(DATE_W3C);
+			$rel_obj = $output_nodes["collection"]->addChild("relatedObject");
+			$rel_obj->addChild("key", $id);
+			$rel_obj_type = $rel_obj->addChild("relation");
+			$rel_obj_type->addAttribute("type", "hasPrincipalInvestigator");
 		}
 	}
 	
@@ -168,7 +221,7 @@ class Ddi2p5ToRifcs extends Crosswalk {
 			switch ($stmt->getName()) {
 			case "AuthEnty":
 				$contrib = $output_nodes["citation_metadata"]->addChild("contributor");
-				$this->addName($contrib, $stmt);
+				$this->addName($contrib, $stmt, $output_nodes);
 				break;
 			}
 		}
