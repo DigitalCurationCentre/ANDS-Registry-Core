@@ -188,8 +188,9 @@ class Ddi2p5ToRifcs extends Crosswalk {
 				$output_nodes["citation_metadata"]->addChild("title", $stmt);
 				break;
 			case "altTitl":
-				$altName = $output_nodes["collection"]->addChild("name", $stmt);
+				$altName = $output_nodes["collection"]->addChild("name");
 				$altName->addAttribute("type", "alternative");
+				$altName->addChild("namePart", $stmt);
 				break;
 			case "IDNo":
 				if (isset($stmt["agency"]) && (string) $stmt["agency"] == "datacite") {
