@@ -146,6 +146,7 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	}
 
 	private function process_citation($input_node, $output_nodes) {
+		$idCount = 0;
 		foreach ($input_node->children('gmd', TRUE)->CI_Citation->children('gmd', TRUE) as $node) {
 			switch ($node->getName()) {
 			case "title":
@@ -206,7 +207,11 @@ class Gemini2p2ToRifcs extends Crosswalk {
 				if (count($code) > 0) {
 					$codeSpace = $node->xpath('gmd:RS_Identifier/gmd:codeSpace/gco:CharacterString');
 					if (count($codeSpace) > 0) {
-						$this->addID($code[0], $codeSpace[0]);
+						$this->addID($output_nodes["collection"], $code[0], $codeSpace[0]);
+						if ($idCount == 0) {
+							$this->addID($output_nodes["citation_metadata"], $code[0], $codeSpace[0]);
+						}
+						$idCount++;
 					}
 				}
 				break;
@@ -215,6 +220,12 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	}
 	
 	private function process_abstract($input_node, $output_nodes) {
+		foreach ($input_node->children('gco', TRUE) as $node) {
+			if ($node->getName() == "CharacterString") {
+				$abstract = $output_nodes["collection"]->addChild("description", CrosswalkHelper::escapeAmpersands($node));
+				$abstract->addAttribute("type", "full");
+			}
+		}
 	}
 	
 	private function process_pointOfContact($input_node, $output_nodes) {
@@ -236,6 +247,12 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	}
 	
 	private function process_topicCategory($input_node, $output_nodes) {
+		foreach ($input_node->children('gmd', TRUE) as $node) {
+			if ($node->getName() == "MD_TopicCategoryCode") {
+				$topic = $output_nodes["collection"]->addChild("subject", CrosswalkHelper::escapeAmpersands($node));
+				$topic->addAttribute("type", "iso19115topic");
+			}
+		}
 	}
 	
 	private function process_extent($input_node, $output_nodes) {
