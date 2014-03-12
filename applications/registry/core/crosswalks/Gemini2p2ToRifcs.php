@@ -5,6 +5,11 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	private $gemini = null;
 	private $rifcs = null;
 	
+	private $thesauri = array(
+		"SeaDataNet PDV" => "seadatanet",
+		"GEMET - INSPIRE themes, version 1.0" => "gemet"
+	);
+	
 	function __construct(){
 		require_once(REGISTRY_APP_PATH . "core/crosswalks/_crosswalk_helper.php");
 		$this->rifcs = simplexml_load_string(CrosswalkHelper::RIFCS_WRAPPER);
@@ -259,6 +264,35 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	}
 	
 	private function process_descriptiveKeywords($input_node, $output_nodes) {
+		$keywordArray = array();
+		$keywordType = "local";
+		foreach ($input_node->children('gmd', TRUE)->MD_Keywords->children('gmd', TRUE) as $node) {
+			switch ($node->getName()) {
+			case "keyword":
+				if (count($node->children('gmx', TRUE)) > 0 && $node->children('gmx', TRUE)->Anchor->attributes('xlink', TRUE)->href !== null) {
+					$kwd = $node->children('gmx', TRUE)->Anchor;
+					$kwdId = $node->children('gmx', TRUE)->Anchor->attributes('xlink', TRUE)->href;
+					$keywordArray[$kwd] = $kwdId;
+				} elseif (count($node->children('gco', TRUE)) > 0) {
+					$kwd = $node->children('gco', TRUE)->CharacterString;
+					$keywordArray[$kwd] = null;
+				}
+				break;
+			case "thesaurusName":
+				$thesaurusTitles = $node->xpath("gmd:CI_Citation/gmd:title/gco:CharacterString");
+				if (count($thesaurusTitles) > 0 && array_key_exists($thesaurusTitles[0], $this->thesauri)) {
+					$keywordType = $this->thesauri[$thesaurusTitles[0]];
+				}
+				break;
+			}
+		}
+		foreach ($keywordArray as $keyword => $keywordID) {
+			$subject = $output_nodes["collection"]->addChild("subject", $keyword);
+			$subject->addAttribute("type", $keywordType);
+			if ($keywordArray) {
+				$subject->addAttribute("termIdentifier", $keywordID);
+			}
+		}
 	}
 	
 	private function process_resourceConstraints($input_node, $output_nodes) {
