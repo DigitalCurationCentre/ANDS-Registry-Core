@@ -89,6 +89,14 @@ class Gemini2p2ToRifcs extends Crosswalk {
 		}
 	}
 	
+	private function addLocationUrl($collection, $url) {
+		$loc = $collection->addChild("location");
+		$addr = $loc->addChild("address");
+		$elec = $addr->addChild("electronic");
+		$elec->addAttribute("type", "url");
+		$elec->addChild("value", $url);
+	}
+	
 	private function addID($collection, $code, $codeSpace) {
 		$id = $code;
 		$idType = "local";
@@ -96,20 +104,36 @@ class Gemini2p2ToRifcs extends Crosswalk {
 			$idType = "infouri";
 		} elseif (strpos($code, "http://purl.org/") == 0) {
 			$idType = "purl";
+			if ($collection->getName() == "collection") {
+				$this->addLocationUrl($collection, $code);
+			} elseif ($collection->getName() == "citationMetadata" && $collection->url === null) {
+				$collection->addChild("url", $code);
+			}
 		} elseif (preg_match('~(?:http://dx.doi.org/|doi:)(10\.\d+/.*)~', $code, $matches)) {
 			$id = $matches[1];
 			$idType = "doi";
+			if ($collection->getName() == "collection") {
+				$this->addLocationUrl($collection, "http://dx.doi.org/" . $id);
+			} elseif ($collection->getName() == "citationMetadata" && $collection->url === null) {
+				$collection->addChild("url", "http://dx.doi.org/" . $id);
+			}
 		} elseif (preg_match('~(?:http://hdl.handle.net/)(1[^/]+/.*)~')) {
 			$id = $matches[1];
 			$idType = "handle";
+			if ($collection->getName() == "collection") {
+				$this->addLocationUrl($collection, "http://hdl.handle.net/" . $id);
+			} elseif ($collection->getName() == "citationMetadata" && $collection->url === null) {
+				$collection->addChild("url", "http://hdl.handle.net/" . $id);
+			}
 		} elseif (CrosswalkHelper::isUrl($code)) {
 			$idType = "uri";
-		} elseif (preg_match('~http://www.([^\.]+).ac.uk/~', $codeSpace, $matches)) {
-			$id = $matches[1] . ": " . $code;
-		} elseif (preg_match('~^[-_\.:A-za-z0-9][^:]+$~', $codeSpace, $matches)) {
-			$id = $matches[1] . ": " . $code;
-		} elseif (preg_match('~^[-_\.:A-za-z0-9]:+$~', $codeSpace, $matches)) {
-			$id = $matches[1] . " " . $code;
+			if ($collection->getName() == "collection") {
+				$this->addLocationUrl($collection, $code);
+			} elseif ($collection->getName() == "citationMetadata" && $collection->url === null) {
+				$collection->addChild("url", $code);
+			}
+		} elseif (CrosswalkHelper::isUri($code)) {
+			$idType = "uri";
 		}
 		$identifier = $collection->addChild("identifier", $id);
 		$identifier->addAttribute("type", $idType);
@@ -262,6 +286,52 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	}
 	
 	private function process_distributionInfo($input_node, $output_nodes) {
+		/* On the matter of URLs, we rely here on distributionInfo being processed
+		 * after identificationInfo. Thus there is room for improvement!
+		 */
+		$urlArray = array();
+		foreach ($input_node->children('gmd', TRUE)->MD_Distribution->children('gmd', TRUE) as $node) {
+			switch ($node->getName()) {
+			case "distributionFormat":
+				break;
+			case "distributor":
+				break;
+			case "transferOptions":
+				$thisUrl = null;
+				$thisUrlType = "none";
+				foreach($node->xpath("gmd:MD_DigitalTransferOptions/gmd:onLine/gmd:CI_OnlineResource") as $subnode) {
+					switch ($subnode->getName()) {
+					case "linkage":
+						$thisUrl = $subnode->children('gmd', TRUE)->URL;
+						break;
+					case "function":
+						$thisUrlType = $subnode->children('gmd', TRUE)->CI_OnLineFunctionCode;
+						break;
+					}
+				}
+				if ($thisUrl) {
+					$urlArray[$thisUrlType] = $thisUrl;
+				}
+				break;
+			}
+			
+		}
+		$url = null;
+		$urlTypeArray = array("download", "order", "offlineAccess", "information", "search", "none");
+		foreach ($urlTypeArray as $urlType) {
+			if (array_key_exists($urlType, $urlArray)) {
+				$url = $urlArray[$urlType];
+				break;
+			}
+		}
+		if ($url) {
+			if (!$output_nodes["collection"]->location->address->electronic->value) {
+				$this->addLocationUrl($output_nodes["collection"], $url);
+			}
+			if ($output_nodes["citation_metadata"]->url === null) {
+				$output_nodes["citation_metadata"]->addChild("url", $url);
+			}
+		}
 	}
 	
 	private function process_dataQualityInfo($input_node, $output_nodes) {
