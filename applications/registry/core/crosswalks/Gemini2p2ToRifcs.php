@@ -10,6 +10,12 @@ class Gemini2p2ToRifcs extends Crosswalk {
 		"GEMET - INSPIRE themes, version 1.0" => "gemet"
 	);
 	
+	private $codeSpaces = array(
+		"ISO 3166" => "iso31661",
+		"ISO-3166-2" => "iso31662",
+		"ISO 3166-2" => "iso31662",
+	);
+	
 	function __construct(){
 		require_once(REGISTRY_APP_PATH . "core/crosswalks/_crosswalk_helper.php");
 		$this->rifcs = simplexml_load_string(CrosswalkHelper::RIFCS_WRAPPER);
@@ -82,8 +88,12 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	}
 	
 	private function addDate($collection, $type, $valueFrom, $valueTo = FALSE) {
-		$dates = $collection->addChild("dates");
-		$dates->addAttribute("type", $type);
+		if ($type == "extent") {
+			$dates = $collection->addChild("temporal");
+		} else {
+			$dates = $collection->addChild("dates");
+			$dates->addAttribute("type", $type);
+		}
 		$dates_dateFrom = $dates->addChild("date", $valueFrom);
 		$dates_dateFrom->addAttribute("type", "dateFrom");
 		$dates_dateFrom->addAttribute("dateFormat", "W3CDTF");
@@ -314,6 +324,114 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	}
 	
 	private function process_extent($input_node, $output_nodes) {
+		foreach ($input_node->children('gmd', TRUE)->EX_Extent->children('gmd', TRUE) as $node) {
+			switch ($node->getName()) {
+			case "temporalElement":
+				$timePeriod = $node->xpath("gmd:EX_TemporalExtent/gmd:extent/gml:TimePeriod");
+				if (count($timePeriod) > 0) {
+					$dateFrom = null;
+					$dateTo= null;
+					foreach ($timePeriod->children('gml', TRUE) as $boundary) {
+						switch ($boundary->getName()) {
+						case "beginPosition":
+							if (preg_match('~^\d\d$~', $boundary, $matches)) {
+								$dateFrom = $matches[0] . "00";
+							} elseif (preg_match('~(\d{4}(?:-\d\d){0,2})~', $boundary, $matches)) {
+								$dateFrom = $matches[1];
+							}
+							break;
+						case "endPosition":
+							if (preg_match('~^\d\d$~', $boundary, $matches)) {
+								$dateTo = $matches[0] . "99";
+							} elseif (preg_match('~(\d{4}(?:-\d\d){0,2})~', $boundary, $matches)) {
+								$dateTo = $matches[1];
+							}
+							break;
+						}
+					}
+					if ($dateFrom) {
+						$this->addDate($output_nodes["coverage"], "extent", $dateFrom, $dateTo);
+					}
+				}
+				break;
+			case "geographicElement":
+				foreach ($node->children('gmd', TRUE) as $subnode) {
+					switch ($subnode->getName()) {
+					case "EX_GeographicBoundingBox":
+						$boundingBoxArray = array(
+							"westBoundLongitude" => null,
+							"eastBoundLongitude" => null,
+							"southBoundLatitude" => null,
+							"northBoundLatitude" => null
+						);
+						foreach($subnode->children('gmd', TRUE) as $boundary) {
+							if (array_key_exists($boundary->getName())) {
+								$boundingBoxArray[$boundary->getName()] = $boundary->children('gco', TRUE)->Decimal;
+							}
+						}
+						if (!in_array(null, $boundingBoxArray, TRUE)) {
+							$dcmiBox =
+								"northlimit={$boundingBoxArray["northBoundLatitude"]}; " .
+								"eastlimit={$boundingBoxArray["eastBoundLongitude"]}; " .
+								"southlimit={$boundingBoxArray["southBoundLatitude"]}; " .
+								"westlimit={$boundingBoxArray["westBoundLongitude"]}";
+							$spatialBox = $output_nodes["coverage"]->addChild("spatial", $dcmiBox);
+							$spatialBox->addAttribute("type", "iso19139dcmiBox");
+						}
+						break;
+					case "EX_GeographicDescription":
+						foreach ($subnode->children('gmd', TRUE)->geographicIdentifier->children('gmd', TRUE) as $subsubnode) {
+							switch ($subsubnode->getName()) {
+							case "RS_Identifier":
+								$code = null;
+								$codeSpace = "text";
+								foreach($subsubnode->children('gmd', TRUE) as $datum) {
+									switch ($datum->getName()) {
+									case "code":
+										$code = $datum->children('gco', TRUE)->CharacterString;
+										break;
+									case "codeSpace":
+										$codeSpaceString = $datum->children('gco', TRUE)->CharacterString;
+										if (array_key_exists($codeSpaceString, $this->codeSpaces)) {
+											$codeSpace = $this->codeSpaces[$codeSpaceString];
+										}
+										break;
+									}
+								}
+								if ($code) {
+									$geoKey = $output_nodes["coverage"]->addChild("spatial", $code);
+									$geokey->addAttribute("type", $codeSpace);
+								}
+								break;
+							case "MD_Identifier":
+								$code = null;
+								$codeSpace = "text";
+								foreach($subsubnode->children('gmd', TRUE) as $datum) {
+									switch ($datum->getName()) {
+									case "code":
+										$code = $datum->children('gco', TRUE)->CharacterString;
+										break;
+									case "authority":
+										$codeSpaceString = $datum->xpath("gmd:CI_Citation/gmd:title/gco:CharacterString");
+										if (count($codeSpaceString) > 0 && array_key_exists($codeSpaceString[0], $this->codeSpaces)) {
+											$codeSpace = $this->codeSpaces[$codeSpaceString];
+										}
+										break;
+									}
+								}
+								if ($code) {
+									$geoKey = $output_nodes["coverage"]->addChild("spatial", $code);
+									$geokey->addAttribute("type", $codeSpace);
+								}
+								break;
+							}
+						}
+						break;
+					}
+				}
+				break;
+			}
+		}
 	}
 	
 	private function process_supplementalInformation($input_node, $output_nodes) {
@@ -348,7 +466,6 @@ class Gemini2p2ToRifcs extends Crosswalk {
 				}
 				break;
 			}
-			
 		}
 		$url = null;
 		$urlTypeArray = array("download", "order", "offlineAccess", "information", "search", "none");
@@ -369,6 +486,15 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	}
 	
 	private function process_dataQualityInfo($input_node, $output_nodes) {
+		foreach ($input_node->children('gmd', TRUE)->DQ_DataQuality->children('gmd', TRUE) as $node) {
+			if ($node->getName() == "lineage") {
+				$lineages = $node->xpath("gmd:LI_Lineage/gmd:statement/gco:CharacterString");
+				if (count($lineages) > 0) {
+					$lineage = $output_nodes["collection"]->addChild("description", $lineages[0]);
+					$lineage->addAttribute("type", "lineage");
+				}
+			}
+		}
 	}
 
 }
