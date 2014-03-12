@@ -299,13 +299,18 @@ class Gemini2p2ToRifcs extends Crosswalk {
 		foreach ($keywordArray as $keyword => $keywordID) {
 			$subject = $output_nodes["collection"]->addChild("subject", $keyword);
 			$subject->addAttribute("type", $keywordType);
-			if ($keywordArray) {
+			if ($keywordID) {
 				$subject->addAttribute("termIdentifier", $keywordID);
 			}
 		}
 	}
 	
 	private function process_resourceConstraints($input_node, $output_nodes) {
+		foreach ($input_node->children('gmd', TRUE)->MD_LegalConstraints->children('gmd', TRUE) as $node) {
+			if ($node->getName() == "useLimitation" || $node->getName() == "otherConstraints") {
+				$output_nodes["rights"]->addChild("accessRights", $node->children('gco', TRUE)->CharacterString);
+			}
+		}
 	}
 	
 	private function process_spatialResolution($input_node, $output_nodes) {
