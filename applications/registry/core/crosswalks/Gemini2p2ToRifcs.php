@@ -268,6 +268,22 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	}
 	
 	private function process_pointOfContact($input_node, $output_nodes) {
+		foreach($input_node->children('gmd', TRUE)->CI_ResponsibleParty->children('gmd', TRUE) as $node) {
+			switch ($node->getName()) {
+			case "individualName":
+				
+				break;
+			case "organisationName":
+				
+				break;
+			case "contactInfo":
+				
+				break;
+			case "role":
+				
+				break;
+			}
+		}
 	}
 	
 	private function process_resourceMaintenance($input_node, $output_nodes) {
@@ -308,7 +324,8 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	private function process_resourceConstraints($input_node, $output_nodes) {
 		foreach ($input_node->children('gmd', TRUE)->MD_LegalConstraints->children('gmd', TRUE) as $node) {
 			if ($node->getName() == "useLimitation" || $node->getName() == "otherConstraints") {
-				$output_nodes["rights"]->addChild("accessRights", $node->children('gco', TRUE)->CharacterString);
+				$constraint = $node->children('gco', TRUE)->CharacterString;
+				$output_nodes["rights"]->addChild("accessRights", CrosswalkHelper::escapeAmpersands($constraint));
 			}
 		}
 	}
