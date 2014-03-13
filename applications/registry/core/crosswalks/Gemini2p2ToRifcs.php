@@ -16,6 +16,15 @@ class Gemini2p2ToRifcs extends Crosswalk {
 		"ISO 3166-2" => "iso31662",
 	);
 	
+	private $roles = array(
+		"custodian" => array("collection" => "isManagedBy", "party" => "isManagerOf"),
+		"owner" => array("collection" => "isOwnedBy", "party" => "isOwnerOf"),
+		"originator" => array("collection" => "hasPrincipalInvestigator", "party" => "isPrincipalInvestigatorOf"),
+		"principalInvestigator" => array("collection" => "hasPrincipalInvestigator", "party" => "isPrincipalInvestigatorOf"),
+		"author" => array("collection" => "hasPrincipalInvestigator", "party" => "isPrincipalInvestigatorOf"),
+		"processor" => array("collection" => "isEnrichedBy", "party" => "enriches"),
+	);
+	
 	function __construct(){
 		require_once(REGISTRY_APP_PATH . "core/crosswalks/_crosswalk_helper.php");
 		$this->rifcs = simplexml_load_string(CrosswalkHelper::RIFCS_WRAPPER);
@@ -48,6 +57,18 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	public function payloadToRIFCS($payload){
 		$this->load_payload($payload);
 		foreach($this->gemini->children('gmd', TRUE) as $record) {
+			/* Some citation information needs to be sorted out once the whole record
+			 * has been processed.
+			 */
+			$responsibilities = array(
+				"author" => array(),
+				"originator" => array(),
+				"principalInvestigator" => array(),
+				"owner" => array(),
+				"publisher" => array(),
+				"distributor" => array(),
+				"resourceProvider" => array()
+			);
 			$reg_obj = $this->rifcs->addChild("registryObject");
 			/* The following should probably be set in the user account, but is here
 			 * for the purposes of the pilot.
@@ -57,6 +78,16 @@ class Gemini2p2ToRifcs extends Crosswalk {
 			$coll = $reg_obj->addChild("collection");
 			$coll->addAttribute("type", "dataset");
 			$coll->addAttribute("dateModified", date(DATE_W3C));
+			// The related info node here is specific to the NERC DCS.
+			// TODO: Find way of inserting source-specific metadata URLs.
+			$related_info = $coll->addChild("relatedInfo");
+			$related_info->addAttribute("type", "metadata");
+			$metadata_url = "http://csw1.cems.rl.ac.uk/geonetwork-NERC/srv/eng/csw?SERVICE=CSW&VERSION=2.0.2&REQUEST=GetRecordById&ElementSetName=full&outputSchema=http://www.isotc211.org/2005/gmd&Id=" . (string) $reg_obj->key;
+			$related_info_id = $related_info->addChild("identifier", $metadata_url);
+			$related_info_id->addAttribute("type", "uri");
+			$related_info_format = $related_info->addChild("format");
+			$related_info_format_id = $related_info_format->addChild("identifier", "http://www.agi.org.uk/storage/standards/uk-gemini/");
+			$related_info_format_id->addAttribute("type", "uri");
 			$citation_metadata = $citation->addChild("citationMetadata");
 			$coverage = $coll->addChild("coverage");
 			$rights = $coll->addChild("rights");
@@ -72,9 +103,49 @@ class Gemini2p2ToRifcs extends Crosswalk {
 							"collection" => $coll,
 							"citation_metadata" => $citation_metadata,
 							"coverage" => $coverage,
-							"rights" => $rights
+							"rights" => $rights,
+							"responsibilities" => $responsibilities
 						)
 					);
+				}
+			}
+			// Now we look for contributors
+			foreach (array("author", "originator", "principalInvestigator", "owner") as $contributorType) {
+				if (count($responsibilities[$contributorType]) > 0) {
+					$i = 1;
+					foreach ($responsibilities[$contributorType] as $contributorName) {
+						$contrib = $citation_metadata->addChild("contributor");
+						if ($contributorType == "author") {
+							$contrib->addAttribute("seq", $i++);
+						}
+						if (is_array($contributorName)) {
+							foreach ($contributorName as $namePartType => $namePartString) {
+								$namePart = $contrib->addChild("namePart", $namePartString);
+								$namePart->addAttribute("type", $namePartType);
+							}
+						} else {
+							$contrib->addChild("namePart", $contributorName);
+						}
+					}
+					break;
+				}
+			}
+			// Now we look for publishers
+			foreach(array("publisher", "distributor", "resourceProvider") as $publisherType) {
+				if (count($responsibilities[$publisherType]) > 0) {
+					foreach ($responsibilities[$publisherType] as $publisherName) {
+						if (is_array($publisherName)) {
+							// This shouldn't happen, but just in case...
+							$publisher = "{$publisherName["given"]} {$publisherName["family"]}";
+							if (isset($publisherName["suffix"])) {
+								$publisher .= " {$publisherName["suffix"]}";
+							}
+						} else {
+							$publisher = $publisherName;
+						}
+						$citation_metadata->addChild("publisher", $publisher);
+					}
+					break;
 				}
 			}
 		}
@@ -268,20 +339,174 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	}
 	
 	private function process_pointOfContact($input_node, $output_nodes) {
+		// First we collect all the information...
+		$partyArray = array();
 		foreach($input_node->children('gmd', TRUE)->CI_ResponsibleParty->children('gmd', TRUE) as $node) {
 			switch ($node->getName()) {
 			case "individualName":
-				
+				$nameString = $node->children('gco', TRUE)->CharacterString;
+				$name = array();
+				if (preg_match("/(.+), ?([^,]+)(?:, ?([^,]+))?/", $nameString, $matches)) {
+					// Name probably in inverted form
+					// TODO handle case of "GivenName Surname, Suffix"
+					$name["family"] = $matches[1];
+					$name["given"] = $matches[2];
+					if (isset($matches[3])) {
+						$name["suffix"] = $matches[3];
+					}
+				} else {
+					/* 
+					* Name in normal order, or "Unknown".
+					* 
+					* It is rare but not impossible to have a double-barrelled surname with a
+					* space instead of a dash (e.g. Ralph Vaughan Williams), so the following
+					* is not entirely robust.
+					*/
+					$nameWords = explode(" ", $nameString);
+					// We filter out "Unknown"
+					if (count($nameWords) > 1) {
+						$name["family"] = array_pop($nameWords);
+						$name["given"] = implode(" ", $nameWords);
+					}
+				}
+				if (count($name) > 0) {
+					$partyArray["person"] = $name;
+				}
 				break;
 			case "organisationName":
-				
+				$partyArray["group"] = $node->children('gco', TRUE)->CharacterString;
 				break;
 			case "contactInfo":
-				
+				$physical = array();
+				$electronic = null;
+				foreach($node->xpath("gmd:CI_Contact/gmd:address/gmd:CI_Address") as $line) {
+					switch ($line->getName()) {
+					case "deliveryPoint":
+						$physical[1] = $line->children('gco', TRUE)->CharacterString;
+						break;
+					case "city":
+						$physical[2] = $line->children('gco', TRUE)->CharacterString;
+						break;
+					case "administrativeArea":
+						$physical[3] = $line->children('gco', TRUE)->CharacterString;
+						break;
+					case "postalCode":
+						$physical[4] = $line->children('gco', TRUE)->CharacterString;
+						break;
+					case "country":
+						$physical[5] = $line->children('gco', TRUE)->CharacterString;
+						break;
+					case "electronicMailAddress":
+						$electronic = $line->children('gco', TRUE)->CharacterString;
+						break;
+					}
+				}
+				$address = array();
+				if (count($physical) > 0) {
+					$address["physical"] = $physical;
+				}
+				if ($electronic) {
+					$address["electronic"] = $electronic;
+				}
+				if (count($address) > 0) {
+					$partyArray["address"] = $address;
+				}
 				break;
 			case "role":
-				
+				$partyArray["role"] = $node->children('gmd', TRUE)->CI_RoleCode;
 				break;
+			}
+		}
+		if (count($partyArray) == 0) {
+			return null;
+		}
+		// We only need to create related objects for certain roles.
+		if (array_key_exists($partyArray["role"], $this->roles)) {
+			/* We cannot rely on each individual having a unique email address, so we
+			* have to concoct an identifier.
+			*/
+			if (isset($partyArray["person"])) {
+				$hashString = "{$partyArray["person"]["given"]} {$partyArray["person"]["family"]}";
+				if (isset($partyArray["person"]["suffix"])) {
+					$hashString .= " {$partyArray["person"]["suffix"]}";
+				}
+			} else {
+				$hashString = $partyArray["group"];
+			}
+			$id = sha1($hashString);
+			// Is this a new or existing party?
+			$ctrb_obj = null;
+			$ctrb_party = null;
+			$new_ctrb = true;
+			foreach ($this->rifcs->children() as $object) {
+				if ((string) $object->key == $id) {
+					$ctrb_obj = $object;
+					$ctrb_party = $object->party;
+					$new_ctrb = false;
+					break;
+				}
+			}
+			if ($new_ctrb) {
+				$ctrb_obj = $this->rifcs->addChild("registryObject");
+				$ctrb_obj->addAttribute("group", "NERC Data Catalogue Service");
+				$ctrb_obj->addChild("key", $id);
+				$originatingSource = "http://www.nerc.ac.uk/";
+				if (isset($output_nodes["registry_object"]->originatingSource)) {
+					$originatingSource = $output_nodes["registry_object"]->originatingSource;
+				}
+				$ctrb_obj->addChild("originatingSource", $originatingSource);
+				$ctrb_party = $ctrb_obj->addChild("party");
+				$ctrb_party->addAttribute("dateModified", date(DATE_W3C));
+				$ctrb_name = $ctrb_party->addChild("name");
+				$ctrb_name->addAttribute("type", "primary");
+				if (isset($partyArray["person"])) {
+					foreach ($partyArray["person"] as $namePartType => $namePartString) {
+						$ctrb_namepart = $ctrb_name->addChild("namePart", $namePartString);
+						$ctrb_namepart->addAttribute("type", $namePartString);
+					}
+					$ctrb_party->addAttribute("type", "person");
+				} else {
+					$ctrb_name->addChild("namePart", $partyArray["group"]);
+					$ctrb_party->addAttribute("type", "group");
+				}
+				if (isset($partyArray["address"])) {
+					$ctrb_location = $ctrb_party->addChild("location");
+					$ctrb_address = $ctrb_location->addChild("address");
+					foreach ($partyArray["address"] as $addressType => $addressInfo) {
+						switch ($addressType) {
+						case "electronic":
+							$email = $ctrb_address->addChild("electronic");
+							$email->addAttribute("type", "email");
+							$email->addChild("value", $addressInfo);
+							break;
+						case "physical":
+							$postal = $ctrb_address->addChild("physical");
+							$postal->addAttribute("type", "postalAddress");
+							foreach ($addressInfo as $addressLine) {
+								$postalLine = $postal->addChild("addressPart", $addressLine);
+								$postalLine->addAttribute("type", "addressLine");
+							}
+							break;
+						}
+					}
+				}
+			}
+			$ctrb_rel_obj = $ctrb_party->addChild("relatedObject");
+			$ctrb_rel_obj->addChild("key", $output_nodes["key"]);
+			$ctrb_rel_obj_type = $ctrb_rel_obj->addChild("relation");
+			$ctrb_rel_obj_type->addAttribute("type", $this->roles[$partyArray["role"]]["party"]);
+			$ctrb_party["dateModified"] = date(DATE_W3C);
+			$rel_obj = $output_nodes["collection"]->addChild("relatedObject");
+			$rel_obj->addChild("key", $id);
+			$rel_obj_type = $rel_obj->addChild("relation");
+			$rel_obj_type->addAttribute("type", $this->roles[$partyArray["role"]]["collection"]);
+		}
+		// Then we put the party forward for inclusion in the citation information, if appropriate.
+		if (array_key_exists($partyArray["role"], $output_nodes["responsibilities"])) {
+			if (array_key_exists("person", $partyArray)) {
+				$output_nodes["responsibilities"][$partyArray["role"]][] = $partyArray["person"];
+			} else {
+				$output_nodes["responsibilities"][$partyArray["role"]][] = $partyArray["group"];
 			}
 		}
 	}
@@ -328,12 +553,6 @@ class Gemini2p2ToRifcs extends Crosswalk {
 				$output_nodes["rights"]->addChild("accessRights", CrosswalkHelper::escapeAmpersands($constraint));
 			}
 		}
-	}
-	
-	private function process_spatialResolution($input_node, $output_nodes) {
-	}
-	
-	private function process_language($input_node, $output_nodes) {
 	}
 	
 	private function process_topicCategory($input_node, $output_nodes) {
@@ -456,9 +675,6 @@ class Gemini2p2ToRifcs extends Crosswalk {
 		}
 	}
 	
-	private function process_supplementalInformation($input_node, $output_nodes) {
-	}
-	
 	private function process_distributionInfo($input_node, $output_nodes) {
 		/* On the matter of URLs, we rely here on distributionInfo being processed
 		 * after identificationInfo. Thus there is room for improvement!
@@ -466,14 +682,15 @@ class Gemini2p2ToRifcs extends Crosswalk {
 		$urlArray = array();
 		foreach ($input_node->children('gmd', TRUE)->MD_Distribution->children('gmd', TRUE) as $node) {
 			switch ($node->getName()) {
-			case "distributionFormat":
-				break;
 			case "distributor":
+				foreach ($node->xpath("gmd:MD_Distributor/gmd:distributorContact/gmd:CI_ResponsibleParty/gmd:organisationName/gco:CharacterString") as $subnode) {
+					$output_nodes["responsibilities"]["distributor"][] = (string) $subnode;
+				}
 				break;
 			case "transferOptions":
 				$thisUrl = null;
 				$thisUrlType = "none";
-				foreach($node->xpath("gmd:MD_DigitalTransferOptions/gmd:onLine/gmd:CI_OnlineResource") as $subnode) {
+				foreach ($node->xpath("gmd:MD_DigitalTransferOptions/gmd:onLine/gmd:CI_OnlineResource") as $subnode) {
 					switch ($subnode->getName()) {
 					case "linkage":
 						$thisUrl = $subnode->children('gmd', TRUE)->URL;
