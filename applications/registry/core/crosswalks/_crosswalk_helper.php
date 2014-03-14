@@ -37,5 +37,12 @@ class CrosswalkHelper {
 		}
 		return false;
 	}
-
+	
+	public static function isEmail($string) {
+		//regex from http://www.regular-expressions.info/email.html
+		if (preg_match('~^[A-Z0-9._%+-]+@(?:[A-Z0-9-]+\.)+[A-Z]{2,4}$~i', $string)) {
+			return true;
+		}
+		return false;
+	}
 }
