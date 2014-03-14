@@ -277,42 +277,41 @@ class Gemini2p2ToRifcs extends Crosswalk {
 			case "date":
 				$dateStamp = $node->xpath('gmd:CI_Date/gmd:date/gco:Date');
 				if (count($dateStamp) > 0) {
-					$dateFrom = $dateStamp[0];
+					$dateFrom = (string) $dateStamp[0];
 					$dateTo = null;
-					if (preg_match('~(\d{4}-\d{2}-\d{2})/(\d{4}-\d{2}-\d{2})~', $dateStamp[0], $dateStamps)) {
+					if (preg_match('~(\d{4}-\d{2}-\d{2})/(\d{4}-\d{2}-\d{2})~', (string) $dateStamp[0], $dateStamps)) {
 						// This is a date range
 						$dateFrom = $dateStamps[1];
 						$dateTo = $dateStamps[2];
 					}
-					$dateType = $node->xpath('gmd:CI_Date/gmd:dateType/gmd:CIDateTypeCode');
+					$dateType = $node->xpath('gmd:CI_Date/gmd:dateType/gmd:CI_DateTypeCode');
 					if (count($dateType) > 0) {
-						if ($dateType[0] == "creation") {
+						if ((string) $dateType[0] == "creation") {
 							$this->addDate($output_nodes["collection"], "dc.created", $dateFrom, $dateTo);
 							$citeCreated = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
 							$citeCreated->addAttribute("type", "created");
-						} elseif ($dateType[0] == "publication") {
-							if (count($dateStamp) > 0) {
-								$this->addDate($output_nodes["collection"], "dc.issued", $dateFrom, $dateTo);
-								if ($dateTo) {
-									$citePublishedFrom = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
-									$citePublishedFrom->addAttribute("type", "startPublicationDate");
-									$citePublishedTo = $output_nodes["citation_metadata"]->addChild("date", $dateTo);
-									$citePublishedTo->addAttribute("type", "endPublicationDate");
-								} else {
-									$citePublished = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
-									$citePublished->addAttribute("type", "publicationDate");
-								}
-								$citeAvailable = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
-								$citeAvailable->addAttribute("type", "available");
-								$citeIssued = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
-								$citeIssued->addAttribute("type", "issued");
+						} elseif ((string) $dateType[0] == "publication") {
+							$this->addDate($output_nodes["collection"], "dc.issued", $dateFrom, $dateTo);
+							if ($dateTo) {
+								$citePublishedFrom = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
+								$citePublishedFrom->addAttribute("type", "startPublicationDate");
+								$citePublishedTo = $output_nodes["citation_metadata"]->addChild("date", $dateTo);
+								$citePublishedTo->addAttribute("type", "endPublicationDate");
+							} else {
+								$citePublished = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
+								$citePublished->addAttribute("type", "publicationDate");
 							}
-						} elseif ($dateType[0] == "revision") {
-							if (count($dateStamp) > 0) {
-								$citeModified = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
-								$citeModified->addAttribute("type", "modified");
-							}
+							$citeAvailable = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
+							$citeAvailable->addAttribute("type", "available");
+							$citeIssued = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
+							$citeIssued->addAttribute("type", "issued");
+						} elseif ((string) $dateType[0] == "revision") {
+							$citeModified = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
+							$citeModified->addAttribute("type", "modified");
 						}
+					} else {
+						$note = $output_nodes["collection"]->addChild("description", "No date type detected.");
+						$note->addAttribute("type", "note");
 					}
 				}
 				break;
@@ -579,16 +578,16 @@ class Gemini2p2ToRifcs extends Crosswalk {
 					foreach ($timePeriod[0]->children('gml', TRUE) as $boundary) {
 						switch ($boundary->getName()) {
 						case "beginPosition":
-							if (preg_match('~^\d\d$~', $boundary, $matches)) {
+							if (preg_match('~^\d\d$~', (string) $boundary, $matches)) {
 								$dateFrom = $matches[0] . "00";
-							} elseif (preg_match('~(\d{4}(?:-\d\d){0,2})~', $boundary, $matches)) {
+							} elseif (preg_match('~(\d{4}(?:-\d\d){0,2})~', (string) $boundary, $matches)) {
 								$dateFrom = $matches[1];
 							}
 							break;
 						case "endPosition":
-							if (preg_match('~^\d\d$~', $boundary, $matches)) {
+							if (preg_match('~^\d\d$~', (string) $boundary, $matches)) {
 								$dateTo = $matches[0] . "99";
-							} elseif (preg_match('~(\d{4}(?:-\d\d){0,2})~', $boundary, $matches)) {
+							} elseif (preg_match('~(\d{4}(?:-\d\d){0,2})~', (string) $boundary, $matches)) {
 								$dateTo = $matches[1];
 							}
 							break;
