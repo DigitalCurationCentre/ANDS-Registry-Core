@@ -380,39 +380,45 @@ class Gemini2p2ToRifcs extends Crosswalk {
 				$partyArray["group"] = (string) $node->children('gco', TRUE)->CharacterString;
 				break;
 			case "contactInfo":
-				$physical = array();
-				$electronic = null;
-				foreach($node->xpath("gmd:CI_Contact/gmd:address/gmd:CI_Address") as $line) {
-					switch ($line->getName()) {
-					case "deliveryPoint":
-						$physical[1] = $line->children('gco', TRUE)->CharacterString;
-						break;
-					case "city":
-						$physical[2] = $line->children('gco', TRUE)->CharacterString;
-						break;
-					case "administrativeArea":
-						$physical[3] = $line->children('gco', TRUE)->CharacterString;
-						break;
-					case "postalCode":
-						$physical[4] = $line->children('gco', TRUE)->CharacterString;
-						break;
-					case "country":
-						$physical[5] = $line->children('gco', TRUE)->CharacterString;
-						break;
-					case "electronicMailAddress":
-						$electronic = $line->children('gco', TRUE)->CharacterString;
-						break;
+				$addressLines = $node->xpath("gmd:CI_Contact/gmd:address/gmd:CI_Address");
+				if (count($addressLines) > 0) {
+					$physical = array();
+					$electronic = null;
+					foreach($addressLines[0]->children('gmd', TRUE) as $line) {
+						switch ($line->getName()) {
+						case "deliveryPoint":
+							$physical[1] = $line->children('gco', TRUE)->CharacterString;
+							break;
+						case "city":
+							$physical[2] = $line->children('gco', TRUE)->CharacterString;
+							break;
+						case "administrativeArea":
+							$physical[3] = $line->children('gco', TRUE)->CharacterString;
+							break;
+						case "postalCode":
+							$physical[4] = $line->children('gco', TRUE)->CharacterString;
+							break;
+						case "country":
+							$physical[5] = $line->children('gco', TRUE)->CharacterString;
+							break;
+						case "electronicMailAddress":
+							$email = trim((string) $line->children('gco', TRUE)->CharacterString);
+							if (CrosswalkHelper::isEmail($email)) {
+								$electronic = $email;
+							}
+							break;
+						}
 					}
-				}
-				$address = array();
-				if (count($physical) > 0) {
-					$address["physical"] = $physical;
-				}
-				if ($electronic) {
-					$address["electronic"] = $electronic;
-				}
-				if (count($address) > 0) {
-					$partyArray["address"] = $address;
+					$address = array();
+					if (count($physical) > 0) {
+						$address["physical"] = $physical;
+					}
+					if ($electronic) {
+						$address["electronic"] = $electronic;
+					}
+					if (count($address) > 0) {
+						$partyArray["address"] = $address;
+					}
 				}
 				break;
 			case "role":
@@ -465,7 +471,7 @@ class Gemini2p2ToRifcs extends Crosswalk {
 				if (isset($partyArray["person"])) {
 					foreach ($partyArray["person"] as $namePartType => $namePartString) {
 						$ctrb_namepart = $ctrb_name->addChild("namePart", $namePartString);
-						$ctrb_namepart->addAttribute("type", $namePartString);
+						$ctrb_namepart->addAttribute("type", $namePartType);
 					}
 					$ctrb_party->addAttribute("type", "person");
 				} else {
