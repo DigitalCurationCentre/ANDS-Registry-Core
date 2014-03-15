@@ -47,6 +47,8 @@ class Gemini2p2ToRifcs extends Crosswalk {
 			return false;
 		}
 		foreach ($this->gemini->children('gmd', TRUE) as $record) {
+			// Some records declare a default namespace instead of prefixing everything:
+			$record->registerXPathNamespace('gmd', "http://www.isotc211.org/2005/gmd");
 			if (count($record->xpath('gmd:fileIdentifier/gco:CharacterString')) == 0) {
 				return false;
 			}
@@ -57,6 +59,8 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	public function payloadToRIFCS($payload){
 		$this->load_payload($payload);
 		foreach($this->gemini->children('gmd', TRUE) as $record) {
+			// Some records declare a default namespace instead of prefixing everything:
+			$record->registerXPathNamespace('gmd', "http://www.isotc211.org/2005/gmd");
 			/* Some citation information needs to be sorted out once the whole record
 			 * has been processed.
 			 */
@@ -147,7 +151,7 @@ class Gemini2p2ToRifcs extends Crosswalk {
 						} else {
 							$publisher = $publisherName;
 						}
-						$citation_metadata->addChild("publisher", $publisher);
+						$citation_metadata->addChild("publisher", CrosswalkHelper::escapeAmpersands($publisher));
 					}
 					break;
 				}
@@ -233,11 +237,11 @@ class Gemini2p2ToRifcs extends Crosswalk {
 		// If this class is used more widely, a different fallback should be selected:
 		$originatingSource = "http://www.nerc.ac.uk/";
 		$sourceUrl = $input_node->xpath('gmd:CI_ResponsibleParty/gmd:contactInfo/gmd:CI_Contact/gmd:onlineResource/gmd:CI_OnlineResource/gmd:linkage/gmd:URL');
-		if (count($sourceUrl > 0)) {
+		if (count($sourceUrl) > 0) {
 			$originatingSource = $sourceUrl[0];
 		} else {
 			$sourceEmail = $input_node->xpath('gmd:CI_ResponsibleParty/gmd:contactInfo/gmd:CI_Contact/gmd:address/gmd:CI_Address/gmd:electronicMailAddress/gco:CharacterString');
-			if (count($sourceEmail > 0)) {
+			if (count($sourceEmail) > 0) {
 				if (preg_match('/@(.+)/', (string) $sourceEmail[0], $host)) {
 					$originatingSource = "http://www." . $host[1] . "/";
 				}
@@ -286,11 +290,11 @@ class Gemini2p2ToRifcs extends Crosswalk {
 					}
 					$dateType = $node->xpath('gmd:CI_Date/gmd:dateType/gmd:CI_DateTypeCode');
 					if (count($dateType) > 0) {
-						if ((string) $dateType[0] == "creation") {
+						if ((string) $dateType[0]["codeListValue"] == "creation") {
 							$this->addDate($output_nodes["collection"], "dc.created", $dateFrom, $dateTo);
 							$citeCreated = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
 							$citeCreated->addAttribute("type", "created");
-						} elseif ((string) $dateType[0] == "publication") {
+						} elseif ((string) $dateType[0]["codeListValue"] == "publication") {
 							$this->addDate($output_nodes["collection"], "dc.issued", $dateFrom, $dateTo);
 							if ($dateTo) {
 								$citePublishedFrom = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
@@ -305,7 +309,7 @@ class Gemini2p2ToRifcs extends Crosswalk {
 							$citeAvailable->addAttribute("type", "available");
 							$citeIssued = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
 							$citeIssued->addAttribute("type", "issued");
-						} elseif ((string) $dateType[0] == "revision") {
+						} elseif ((string) $dateType[0]["codeListValue"] == "revision") {
 							$citeModified = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
 							$citeModified->addAttribute("type", "modified");
 						}
@@ -478,25 +482,38 @@ class Gemini2p2ToRifcs extends Crosswalk {
 					$ctrb_name->addChild("namePart", $partyArray["group"]);
 					$ctrb_party->addAttribute("type", "group");
 				}
-				if (isset($partyArray["address"])) {
+			}
+			if (isset($partyArray["address"])) {
+				if (!$ctrb_party->location) {
 					$ctrb_location = $ctrb_party->addChild("location");
 					$ctrb_address = $ctrb_location->addChild("address");
-					foreach ($partyArray["address"] as $addressType => $addressInfo) {
-						switch ($addressType) {
-						case "electronic":
+				} else {
+					$ctrb_location = $ctrb_party->location;
+					if (!$ctrb_location->address) {
+						$ctrb_address = $ctrb_location->addChild("address");
+					} else {
+						$ctrb_address = $ctrb_location->address;
+					}
+				}
+				foreach ($partyArray["address"] as $addressType => $addressInfo) {
+					switch ($addressType) {
+					case "electronic":
+						if (!$ctrb_address->electronic) {
 							$email = $ctrb_address->addChild("electronic");
 							$email->addAttribute("type", "email");
 							$email->addChild("value", $addressInfo);
-							break;
-						case "physical":
+						}
+						break;
+					case "physical":
+						if (!$ctrb_address->physical) {
 							$postal = $ctrb_address->addChild("physical");
 							$postal->addAttribute("type", "postalAddress");
 							foreach ($addressInfo as $addressLine) {
 								$postalLine = $postal->addChild("addressPart", $addressLine);
 								$postalLine->addAttribute("type", "addressLine");
 							}
-							break;
 						}
+						break;
 					}
 				}
 			}
@@ -556,10 +573,14 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	}
 	
 	private function process_resourceConstraints($input_node, $output_nodes) {
-		foreach ($input_node->children('gmd', TRUE)->MD_LegalConstraints->children('gmd', TRUE) as $node) {
-			if ($node->getName() == "useLimitation" || $node->getName() == "otherConstraints") {
-				$constraint = $node->children('gco', TRUE)->CharacterString;
-				$output_nodes["rights"]->addChild("accessRights", CrosswalkHelper::escapeAmpersands($constraint));
+		foreach ($input_node->children('gmd', TRUE) as $node) {
+			if ($node->getName() == "MD_LegalConstraints") {
+				foreach ($node->children('gmd', TRUE) as $subnode) {
+					if ($subnode->getName() == "useLimitation" || $subnode->getName() == "otherConstraints") {
+						$constraint = $subnode->children('gco', TRUE)->CharacterString;
+						$output_nodes["rights"]->addChild("accessRights", CrosswalkHelper::escapeAmpersands($constraint));
+					}
+				}
 			}
 		}
 	}
@@ -575,6 +596,8 @@ class Gemini2p2ToRifcs extends Crosswalk {
 	
 	private function process_extent($input_node, $output_nodes) {
 		foreach ($input_node->children('gmd', TRUE)->EX_Extent->children('gmd', TRUE) as $node) {
+			//HACK: Some records override an unversioned GML namespace with a versioned one at this point:
+			$node->registerXPathNamespace('gml', "http://www.opengis.net/gml/3.2");
 			switch ($node->getName()) {
 			case "temporalElement":
 				$timePeriod = $node->xpath("gmd:EX_TemporalExtent/gmd:extent/gml:TimePeriod");
@@ -641,7 +664,7 @@ class Gemini2p2ToRifcs extends Crosswalk {
 										$code = $datum->children('gco', TRUE)->CharacterString;
 										break;
 									case "codeSpace":
-										$codeSpaceString = $datum->children('gco', TRUE)->CharacterString;
+										$codeSpaceString = (string) $datum->children('gco', TRUE)->CharacterString;
 										if (isset($this->codeSpaces[$codeSpaceString])) {
 											$codeSpace = $this->codeSpaces[$codeSpaceString];
 										}
@@ -650,7 +673,7 @@ class Gemini2p2ToRifcs extends Crosswalk {
 								}
 								if ($code) {
 									$geoKey = $output_nodes["coverage"]->addChild("spatial", $code);
-									$geokey->addAttribute("type", $codeSpace);
+									$geoKey->addAttribute("type", $codeSpace);
 								}
 								break;
 							case "MD_Identifier":
