@@ -86,6 +86,23 @@ class OaiDcToRifcs extends Crosswalk {
 		}
 	}
 	
+	private function addDate($node, $type, $valueFrom, $valueTo = FALSE) {
+		if ($node.getName() == "coverage") {
+			$dates = $node->addChild("temporal");
+		} else {
+			$dates = $node->addChild("dates");
+			$dates->addAttribute("type", $type);
+		}
+		$dates_dateFrom = $dates->addChild("date", $valueFrom);
+		$dates_dateFrom->addAttribute("type", "dateFrom");
+		$dates_dateFrom->addAttribute("dateFormat", "W3CDTF");
+		if ($valueTo) {
+			$dates_dateTo = $dates->addChild("date", $valueTo);
+			$dates_dateTo->addAttribute("type", "dateTo");
+			$dates_dateTo->addAttribute("dateFormat", "W3CDTF");
+		}
+	}
+	
 	private function addLocationUrl($collection, $url) {
 		$loc = $collection->addChild("location");
 		$addr = $loc->addChild("address");
@@ -119,7 +136,24 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function process_date($input_node, $output_nodes) {
-		
+		$dateString = (string) $input_node;
+		if ($divider = strpos($dateString, '/')) {
+			$dateFrom = substr($dateString, 0, $divider);
+			$dateTo = substr($dateString, $divider);
+			$this->addDate($output_nodes["collection"], "dc.issued", $dateFrom, $dateTo);
+			$cite_start_published = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
+			$cite_start_published->addAttribute("type", "startPublicationDate");
+			$cite_end_published = $output_nodes["citation_metadata"]->addChild("date", $dateTo);
+			$cite_end_published->addAttribute("type", "endPublicationDate");
+		} else {
+			$dateString
+			$this->addDate($output_nodes["collection"], "dc.issued", $dateString);
+			$cite_published = $output_nodes["citation_metadata"]->addChild("date", $dateString);
+		}
+		$cite_available = $output_nodes["citation_metadata"]->addChild("date", $dateString);
+		$cite_available->addAttribute("type", "available");
+		$cite_issued = $output_nodes["citation_metadata"]->addChild("date", $dateString);
+		$cite_issued->addAttribute("type", "issued");
 	}
 	
 	private function process_type($input_node, $output_nodes) {
