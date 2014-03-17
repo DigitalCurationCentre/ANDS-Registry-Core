@@ -86,6 +86,14 @@ class OaiDcToRifcs extends Crosswalk {
 		}
 	}
 	
+	private function addLocationUrl($collection, $url) {
+		$loc = $collection->addChild("location");
+		$addr = $loc->addChild("address");
+		$elec = $addr->addChild("electronic");
+		$elec->addAttribute("type", "url");
+		$elec->addChild("value", $url);
+	}
+	
 	private function process_title($input_node, $output_nodes) {
 		
 	}
@@ -123,7 +131,45 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function process_identifier($input_node, $output_nodes) {
-		
+		$id = (string) $input_node;
+		$idType = "local";
+		if (strpos($id, "info:") === 0) {
+			$idType = "infouri";
+		} elseif (strpos($id, "http://purl.org/") === 0) {
+			$idType = "purl";
+			$this->addLocationUrl($output_nodes["collection"], $id);
+			if ($output_nodes["citation_metadata"]->url === null) {
+				$output_nodes["citation_metadata"]->addChild("url", $id);
+			}
+		} elseif (preg_match('~(?:http://dx.doi.org/|doi:)(10\.\d+/.*)~', $id, $matches)) {
+			$id = $matches[1];
+			$idType = "doi";
+			$this->addLocationUrl($output_nodes["collection"], "http://dx.doi.org/" . $id);
+			if ($output_nodes["citation_metadata"]->url === null) {
+				$output_nodes["citation_metadata"]->addChild("url", "http://dx.doi.org/" . $id);
+			}
+		} elseif (preg_match('~(?:http://hdl.handle.net/)(1[^/]+/.*)~', $id, $matches)) {
+			$id = $matches[1];
+			$idType = "handle";
+			$this->addLocationUrl($output_nodes["collection"], "http://hdl.handle.net/" . $id);
+			if ($output_nodes["citation_metadata"]->url === null) {
+				$output_nodes["citation_metadata"]->addChild("url", "http://hdl.handle.net/" . $id);
+			}
+		} elseif (CrosswalkHelper::isUrl($id)) {
+			$idType = "uri";
+			$this->addLocationUrl($output_nodes["collection"], $id);
+			if ($output_nodes["citation_metadata"]->url === null) {
+				$output_nodes["citation_metadata"]->addChild("url", $id);
+			}
+		} elseif (CrosswalkHelper::isUri($id)) {
+			$idType = "uri";
+		}
+		$identifier = $output_nodes["collection"]->addChild("identifier", $id);
+		$identifier->addAttribute("type", $idType);
+		if ($output_nodes["citation_metadata"]->identifier === null) {
+			$cite_identifier = $output_nodes["citation_metadata"]->addChild("identifier", $id);
+			$cite_identifier->addAttribute("type", $idType);
+		}
 	}
 	
 	private function process_source($input_node, $output_nodes) {
