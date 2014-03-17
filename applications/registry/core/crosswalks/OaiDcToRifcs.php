@@ -47,6 +47,8 @@ class OaiDcToRifcs extends Crosswalk {
 			$reg_obj = $this->rifcs->addChild("registryObject");
 			if (isset($this->oaiProviders[(string) $this->oaipmh->request])) {
 				$reg_obj->addAttribute("group", $this->oaiProviders[(string) $this->oaipmh->request]);
+			} else {
+				$reg_obj->addAttribute("group", $this->oaipmh->request);
 			}
 			$key = $reg_obj->addChild("key", $record->header->identifier);
 			$originatingSource = $reg_obj->addChild("originatingSource", $this->oaipmh->request);
@@ -57,6 +59,7 @@ class OaiDcToRifcs extends Crosswalk {
 			$citation_metadata = $citation->addChild("citationMetadata");
 			$coverage = $coll->addChild("coverage");
 			$rights = $coll->addChild("rights");
+			$contributors = array();
 			foreach ($record->metadata->children('oai_dc', TRUE)->dc->children('dc', TRUE) as $node) {
 				foreach ($node->children() as $subnode) {
 					$func = "process_".$subnode->getName();
@@ -70,9 +73,27 @@ class OaiDcToRifcs extends Crosswalk {
 								"collection" => $coll,
 								"citation_metadata" => $citation_metadata,
 								"coverage" => $coverage,
-								"rights" => $rights
+								"rights" => $rights,
+								"contributors" => &$contributors
 							)
 						);
+					}
+				}
+			}
+			if ($citation_metadata->publisher === null && isset($this->oaiProviders[(string) $this->oaipmh->request])) {
+				$citation_metadata->addChild("publisher", $this->oaiProviders[(string) $this->oaipmh->request]);
+			}
+			/* Processing contributor names is deferred till now to ensure
+			 * they come after creator names.
+			 */
+			if (count($contributors) > 0) {
+				foreach ($contributors as $author_name) {
+					$ctrb = $citation_metadata->addChild("contributor");
+					foreach ($author_name["parts"] as $partType => $part) {
+						$ctrb_part = $ctrb->addChild("namePart", $part);
+						if ($partType != "whole") {
+							$ctrb_part->addAttribute("type", $partType);
+						}
 					}
 				}
 			}
@@ -111,6 +132,37 @@ class OaiDcToRifcs extends Crosswalk {
 		$elec->addChild("value", $url);
 	}
 	
+	private function parseNames($authorString) {
+		$authors = array();
+		$names = array();
+		if (strpos($authorString, ';')) {
+			// Semicolon present, probably used as a separator
+			$authors = explode(';', $authorString);
+		} else {
+			$authors[] = $authorString;
+		}
+		foreach($authors as $authorName) {
+			if (preg_match("/(.+), ?([^,]+)(?:, ?([^,]+))?/", $value, $matches)) {
+				$name_parts = array();
+				$name_parts["family"] = $matches[1];
+				$name_parts["given"] = $matches[2];
+				if (isset($matches[3])) {
+					$name_parts["suffix"] = $matches[3];
+				}
+				$name = array("type" => "person", "parts" => $name_parts);
+				$names[] = $name;
+			} elseif (strpos($trim($authorName), ' ') === FALSE || strpos($authorName, ' of ') !== FALSE || stripos($authorName, 'the ') !== FALSE ) {
+				$name = array("type" => "group", "parts" => array("whole" => $authorName));
+				$names[] = $name;
+			} else {
+				// This might be a person or a group; we assume a person but don't parse further.
+				$name = array("type" => "person", "parts" => array("whole" => $authorName));
+				$names[] = $name;
+			}
+		}
+		return $names;
+	}
+	
 	private function process_title($input_node, $output_nodes) {
 		$title = (string) $input_node;
 		$name = $output_nodes["collection"]->addChild("name");
@@ -120,7 +172,66 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function process_creator($input_node, $output_nodes) {
-		
+		$names = $this->parseNames((string) $input_node);
+		foreach ($names as $author_name) {
+			$ctrb = $output_nodes["citation_metadata"]->addChild("contributor");
+			$hashString = "";
+			if (isset($author_name["parts"]["whole"])) {
+				$ctrb->addChild("namePart", $author_name["parts"]["whole"]);
+				$hashString = $author_name["parts"]["whole"];
+			} else {
+				$ctrb_given = $ctrb->addChild("namePart", $author_name["parts"]["given"]);
+				$ctrb_given->addAttribute("type", "given");
+				$hashString .= $author_name["parts"]["given"];
+				$ctrb_family = $ctrb->addChild("namePart", $author_name["parts"]["family"]);
+				$ctrb_family->addAttribute("type", "family");
+				$hashString .= " " . $author_name["parts"]["family"];
+				if (isset($author_name["parts"]["suffix"])) {
+					$ctrb_suffix = $ctrb->addChild("namePart", $author_name["parts"]["suffix"]);
+					$ctrb_suffix->addAttribute("type", "suffix");
+					$hashString .= " " . $author_name["parts"]["suffix"];
+				}
+			}
+			$id = sha1($hashString);
+			// Is this a new or existing party?
+			$ctrb_obj = null;
+			$ctrb_party = null;
+			$new_ctrb = true;
+			foreach ($this->rifcs->children() as $object) {
+				if ((string) $object->key == $id) {
+					$ctrb_obj = $object;
+					$ctrb_party = $object->party;
+					$new_ctrb = false;
+					break;
+				}
+			}
+			if ($new_ctrb) {
+				$ctrb_obj = $this->rifcs->addChild("registryObject");
+				$ctrb_obj->addAttribute("group", $output_nodes["registry_object"]->group);
+				$ctrb_obj->addChild("key", $id);
+				$ctrb_obj->addChild("originatingSource", $output_nodes["registry_object"]->originatingSource);
+				$ctrb_party = $ctrb_obj->addChild("party");
+				$ctrb_party->addAttribute("dateModified", date(DATE_W3C));
+				$ctrb_party->addAttribute("type", $author_name["type"]);
+				$ctrb_name = $ctrb_party->addChild("name");
+				$ctrb_name->addAttribute("type", "primary");
+				foreach ($author_name["parts"] as $partType => $part) {
+					$ctrb_part = $ctrb_name->addChild("namePart", $part);
+					if ($partType != "whole") {
+						$ctrb_part->addAttribute("type", $partType);
+					}
+				}
+			}
+			$ctrb_rel_obj = $ctrb_party->addChild("relatedObject");
+			$ctrb_rel_obj->addChild("key", $output_nodes["key"]);
+			$ctrb_rel_obj_type = $ctrb_rel_obj->addChild("relation");
+			$ctrb_rel_obj_type->addAttribute("type", "isPrincipalInvestigatorOf");
+			$ctrb_party["dateModified"] = date(DATE_W3C);
+			$rel_obj = $output_nodes["collection"]->addChild("relatedObject");
+			$rel_obj->addChild("key", $id);
+			$rel_obj_type = $rel_obj->addChild("relation");
+			$rel_obj_type->addAttribute("type", "hasPrincipalInvestigator");
+		}
 	}
 	
 	private function process_subject($input_node, $output_nodes) {
@@ -152,11 +263,11 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function process_publisher($input_node, $output_nodes) {
-		
+		$output_nodes["citation_metadata"]->addChild("publisher", $input_node);
 	}
 	
 	private function process_contributor($input_node, $output_nodes) {
-		
+		$output_nodes["contributors"] = $this->parseNames((string) $input_node);
 	}
 	
 	private function process_date($input_node, $output_nodes) {
@@ -274,7 +385,7 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function process_rights($input_node, $output_nodes) {
-		
+		$output_nodes["rights"]->addChild("rightsStatement", $input_node);
 	}
 
 }
