@@ -87,7 +87,7 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function addDate($node, $type, $valueFrom, $valueTo = FALSE) {
-		if ($node.getName() == "coverage") {
+		if ($node->getName() == "coverage") {
 			$dates = $node->addChild("temporal");
 		} else {
 			$dates = $node->addChild("dates");
@@ -243,7 +243,34 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function process_coverage($input_node, $output_nodes) {
-		
+		$coverage = (string) $input_node;
+		// Is this a date or date range?
+		if ($divider = strpos($dateString, '/')) {
+			$dateFromString = substr($dateString, 0, $divider);
+			if ($dateFromDate = strtotime($dateFromString)) {
+				// It's a date range
+				$dateFrom = date(DATE_W3C, $dateFromDate);
+				$dateToString = substr($dateString, $divider);
+				if ($dateToDate = strtotime($dateToString)) {
+					$dateTo = date(DATE_W3C, $dateToDate);
+				} else {
+					$dateTo = FALSE;
+				}
+				$this->addDate($output_nodes["coverage"], "extent", $dateFrom, $dateTo);
+			} else {
+				// It's probably a description of spatial coverage
+				$spatial = $output_nodes["coverage"]->addChild("spatial", $coverage);
+				$spatial->addAttribute("type", "text");
+			}
+		} elseif ($dateFromDate = strtotime($coverage)) {
+			// It's a single date
+			$dateFrom = date(DATE_W3C, $dateFromDate);
+			$this->addDate($output_nodes["coverage"], "extent", $dateFrom);
+		} else {
+			// It's probably a description of spatial coverage
+			$spatial = $output_nodes["coverage"]->addChild("spatial", $coverage);
+			$spatial->addAttribute("type", "text");
+		}
 	}
 	
 	private function process_rights($input_node, $output_nodes) {
