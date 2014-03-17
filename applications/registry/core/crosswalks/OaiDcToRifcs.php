@@ -291,14 +291,6 @@ class OaiDcToRifcs extends Crosswalk {
 		$cite_issued->addAttribute("type", "issued");
 	}
 	
-	private function process_type($input_node, $output_nodes) {
-		
-	}
-	
-	private function process_format($input_node, $output_nodes) {
-		
-	}
-	
 	private function process_identifier($input_node, $output_nodes) {
 		$id = (string) $input_node;
 		$idType = "local";
@@ -342,15 +334,65 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function process_source($input_node, $output_nodes) {
-		
-	}
-	
-	private function process_language($input_node, $output_nodes) {
-		
+		$id = (string) $input_node;
+		$parsed_id = $id;
+		if (preg_match('~(?:http://dx.doi.org/|doi:)(10\.\d+/.*)~', $id, $matches)) {
+			$parsed_id = $matches[1];
+		} elseif (preg_match('~(?:http://hdl.handle.net/)(1[^/]+/.*)~', $id, $matches)) {
+			$parsed_id = $matches[1];
+		}
+		$source = null;
+		foreach ($this->rifcs->children() as $object) {
+			if ($object->collection !== null) {
+				if ((string) $object->key == $id) {
+					$source = $object;
+					break;
+				} else {
+					foreach ($object->collection->identifier as $identifier) {
+						if ($parsed_id == (string) $identifier) {
+							$source = $object;
+							break 2;
+						}
+					}
+				}
+			}
+		}
+		if ($source) {
+			$related = $output_nodes["collection"]->addChild("relatedObject");
+			$related->addChild("key", $source->key);
+			$relation = $related->addChild("relation");
+			$relation->addChild("type", "isDerivedFrom");
+			$source_related = $source->collection->addChild("relatedObject");
+			$source_related->addChild("key", $output_nodes["key"]);
+			$source_relation = $source_related->addChild("relation");
+			$source_relation->addChild("type", "hasDerivedCollection");
+		}
 	}
 	
 	private function process_relation($input_node, $output_nodes) {
-		
+		$id = (string) $input_node;
+		$idType = "local";
+		if (strpos($id, "info:") === 0) {
+			$idType = "infouri";
+		} elseif (strpos($id, "http://purl.org/") === 0) {
+			$idType = "purl";
+		} elseif (preg_match('~(?:http://dx.doi.org/|doi:)(10\.\d+/.*)~', $id, $matches)) {
+			$id = $matches[1];
+			$idType = "doi";
+		} elseif (preg_match('~(?:http://hdl.handle.net/)(1[^/]+/.*)~', $id, $matches)) {
+			$id = $matches[1];
+			$idType = "handle";
+		} elseif (CrosswalkHelper::isUrl($id)) {
+			$idType = "uri";
+		} elseif (CrosswalkHelper::isUri($id)) {
+			$idType = "uri";
+		}
+		$related = $output_nodes["collection"]->addChild("relatedInfo");
+		$identifier = $related->addChild("identifier", $id);
+		$identifier->addAttribute("type", $idType);
+		$relation = $related->addChild("relation");
+		$relation->addAttribute("type", "hasAssociationWith");
+		$relation->addChild("description", "Unknown");
 	}
 	
 	private function process_coverage($input_node, $output_nodes) {
