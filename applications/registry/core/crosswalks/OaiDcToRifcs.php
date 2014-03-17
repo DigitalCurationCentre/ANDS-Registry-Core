@@ -61,23 +61,21 @@ class OaiDcToRifcs extends Crosswalk {
 			$rights = $coll->addChild("rights");
 			$contributors = array();
 			foreach ($record->metadata->children('oai_dc', TRUE)->dc->children('dc', TRUE) as $node) {
-				foreach ($node->children() as $subnode) {
-					$func = "process_".$subnode->getName();
-					if (is_callable(array($this, $func))){
-						call_user_func(
-							array($this, $func),
-							$subnode,
-							array(
-								"registry_object" => $reg_obj,
-								"key" => $key,
-								"collection" => $coll,
-								"citation_metadata" => $citation_metadata,
-								"coverage" => $coverage,
-								"rights" => $rights,
-								"contributors" => &$contributors
-							)
-						);
-					}
+				$func = "process_".$node->getName();
+				if (is_callable(array($this, $func))){
+					call_user_func(
+						array($this, $func),
+						$node,
+						array(
+							"registry_object" => $reg_obj,
+							"key" => $key,
+							"collection" => $coll,
+							"citation_metadata" => $citation_metadata,
+							"coverage" => $coverage,
+							"rights" => $rights,
+							"contributors" => &$contributors
+						)
+					);
 				}
 			}
 			if ($citation_metadata->publisher === null && isset($this->oaiProviders[(string) $this->oaipmh->request])) {
@@ -142,7 +140,7 @@ class OaiDcToRifcs extends Crosswalk {
 			$authors[] = $authorString;
 		}
 		foreach($authors as $authorName) {
-			if (preg_match("/(.+), ?([^,]+)(?:, ?([^,]+))?/", $value, $matches)) {
+			if (preg_match("/(.+), ?([^,]+)(?:, ?([^,]+))?/", $authorName, $matches)) {
 				$name_parts = array();
 				$name_parts["family"] = $matches[1];
 				$name_parts["given"] = $matches[2];
@@ -151,7 +149,7 @@ class OaiDcToRifcs extends Crosswalk {
 				}
 				$name = array("type" => "person", "parts" => $name_parts);
 				$names[] = $name;
-			} elseif (strpos($trim($authorName), ' ') === FALSE || strpos($authorName, ' of ') !== FALSE || stripos($authorName, 'the ') !== FALSE ) {
+			} elseif (strpos(trim($authorName), ' ') === FALSE || strpos($authorName, ' of ') !== FALSE || stripos($authorName, 'the ') !== FALSE ) {
 				$name = array("type" => "group", "parts" => array("whole" => $authorName));
 				$names[] = $name;
 			} else {
@@ -207,7 +205,7 @@ class OaiDcToRifcs extends Crosswalk {
 			}
 			if ($new_ctrb) {
 				$ctrb_obj = $this->rifcs->addChild("registryObject");
-				$ctrb_obj->addAttribute("group", $output_nodes["registry_object"]->group);
+				$ctrb_obj->addAttribute("group", $output_nodes["registry_object"]["group"]);
 				$ctrb_obj->addChild("key", $id);
 				$ctrb_obj->addChild("originatingSource", $output_nodes["registry_object"]->originatingSource);
 				$ctrb_party = $ctrb_obj->addChild("party");
@@ -258,12 +256,12 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function process_description($input_node, $output_nodes) {
-		$description = $output_nodes["collection"]->addChild("description", $input_node);
+		$description = $output_nodes["collection"]->addChild("description", (string) $input_node);
 		$description->addAttribute("type", "full");
 	}
 	
 	private function process_publisher($input_node, $output_nodes) {
-		$output_nodes["citation_metadata"]->addChild("publisher", $input_node);
+		$output_nodes["citation_metadata"]->addChild("publisher", (string) $input_node);
 	}
 	
 	private function process_contributor($input_node, $output_nodes) {
@@ -281,9 +279,9 @@ class OaiDcToRifcs extends Crosswalk {
 			$cite_end_published = $output_nodes["citation_metadata"]->addChild("date", $dateTo);
 			$cite_end_published->addAttribute("type", "endPublicationDate");
 		} else {
-			$dateString
 			$this->addDate($output_nodes["collection"], "dc.issued", $dateString);
 			$cite_published = $output_nodes["citation_metadata"]->addChild("date", $dateString);
+			$cite_published->addAttribute("type", "publicationDate");
 		}
 		$cite_available = $output_nodes["citation_metadata"]->addChild("date", $dateString);
 		$cite_available->addAttribute("type", "available");
@@ -427,7 +425,7 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function process_rights($input_node, $output_nodes) {
-		$output_nodes["rights"]->addChild("rightsStatement", $input_node);
+		$output_nodes["rights"]->addChild("rightsStatement", (string) $input_node);
 	}
 
 }
