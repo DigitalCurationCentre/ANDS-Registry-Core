@@ -112,7 +112,11 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function process_title($input_node, $output_nodes) {
-		
+		$title = (string) $input_node;
+		$name = $output_nodes["collection"]->addChild("name");
+		$name->addAttribute("type", "primary");
+		$name->addChild("namePart", $title);
+		$output_nodes["citation_metadata"]->addChild("title", $title);
 	}
 	
 	private function process_creator($input_node, $output_nodes) {
@@ -120,11 +124,31 @@ class OaiDcToRifcs extends Crosswalk {
 	}
 	
 	private function process_subject($input_node, $output_nodes) {
-		
+		$subject = (string) $input_node;
+		$subjects = array();
+		$raw_subjects = array();
+		if (strpos($subject, ';')) {
+			// Semicolon present, probably used as a separator
+			$raw_subjects = explode(';', $subject);
+		} elseif (substr_count($subject, ',') > 1) {
+			// More than one comma, so commas probably used as separators
+			$raw_subjects = explode(',', $subject);
+		} else {
+			// Probably a single term
+			$raw_subjects[] = $subject;
+		}
+		foreach ($raw_subjects as $term) {
+			$subjects[] = trim($term);
+		}
+		foreach ($subjects as $term) {
+			$keyword = $output_nodes["collection"]->addChild("subject", $term);
+			$keyword->addAttribute("type", "local");
+		}
 	}
 	
 	private function process_description($input_node, $output_nodes) {
-		
+		$description = $output_nodes["collection"]->addChild("description", $input_node);
+		$description->addAttribute("type", "full");
 	}
 	
 	private function process_publisher($input_node, $output_nodes) {
