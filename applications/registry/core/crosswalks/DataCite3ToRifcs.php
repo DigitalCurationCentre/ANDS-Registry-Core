@@ -54,7 +54,6 @@ class DataCite3ToRifcs extends Crosswalk {
 			$coll->addAttribute("dateModified", date(DATE_W3C));
 			$citation = $coll->addChild("citationInfo");
 			$citation_metadata = $citation->addChild("citationMetadata");
-			$coverage = $coll->addChild("coverage");
 			$contributors = array();
 			foreach ($record->metadata->oai_datacite->payload->resource->children() as $node) {
 				$func = "process_".$node->getName();
@@ -67,7 +66,6 @@ class DataCite3ToRifcs extends Crosswalk {
 							"key" => $key,
 							"collection" => $coll,
 							"citation_metadata" => $citation_metadata,
-							"coverage" => $coverage,
 							"contributors" => &$contributors
 						)
 					);
@@ -333,13 +331,59 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_descriptions($input_node, $output_nodes) {
-		
+		foreach ($input_node->children() as $node) {
+			$descType = $node["descriptionType"];
+			switch ($descType) {
+			case "Abstract":
+				$description = $output_nodes["collection"]->addChild("description", (string) $node);
+				$description->addAttribute("type", "full");
+				break;
+			case "Methods":
+				$description = $output_nodes["collection"]->addChild("description", (string) $node);
+				$description->addAttribute("type", "lineage");
+				break;
+			case "Other":
+				$description = $output_nodes["collection"]->addChild("description", (string) $node);
+				$description->addAttribute("type", "brief");
+				break;
+			}
+		}
 	}
 	
 	private function process_geoLocations($input_node, $output_nodes) {
-		
+		foreach ($input_node->children() as $node) {
+			$coverage = $output_nodes["collection"]->addChild("coverage");
+			foreach ($node->children() as $subnode) {
+				switch ($subnode->getName()) {
+				case "geoLocationPoint":
+					if (preg_match('~(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)~', (string) $subnode, $matches)) {
+						$dcmiPoint =
+							"north={$matches[1]}; " .
+							"east={$matches[2]}";
+						$spatial = $coverage->addChild("spatial", $dcmiPoint);
+						$spatial->addAttribute("type", "dcmiPoint");
+					}
+					break;
+				case "geoLocationBox":
+					if (preg_match('~(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)~', (string) $subnode, $matches)) {
+						$dcmiBox =
+							"northlimit={$matches[3]}; " .
+							"eastlimit={$matches[4]}; " .
+							"southlimit={$matches[1]}; " .
+							"westlimit={$matches[2]}";
+						$spatial = $coverage->addChild("spatial", $dcmiBox);
+						$spatial->addAttribute("type", "iso19139dcmiBox");
+					}
+					break;
+				case "geoLocationPlace":
+					$spatial = $coverage->addChild("spatial", $subnode);
+					$spatial->addAttribute("type", "text");
+					break;
+				}
+			}
+		}
 	}
-
+	
 }
 
 ?>
