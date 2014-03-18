@@ -88,7 +88,20 @@ class DataCite3ToRifcs extends Crosswalk {
 	private function translateIdentifierType($string){
 		$idType = "local";
 		$idTypes = array(
+			"ARK" => "ark",
 			"DOI" => "doi",
+			"EAN13" => "ean13",
+			"EISSN" => "eissn",
+			"Handle" => "handle",
+			"ISBN" => "isbn",
+			"ISSN" => "issn",
+			"ISTC" => "istc",
+			"LISSN" => "lissn",
+			"LSID" => "urn",
+			"PURL" => "purl",
+			"UPC" => "upc",
+			"URL" => "uri",
+			"URN" => "urn",
 		);
 		if (isset($idTypes[$string])) {
 			$idType = $idTypes[$string];
@@ -120,7 +133,21 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_titles($input_node, $output_nodes) {
-		
+		foreach ($input_node->children() as $title) {
+			if (isset($title["titleType"])) {
+				if ($title["titleType"] == "AlternativeTitle") {
+					$altTitle = $output_nodes["collection"]->addChild("name");
+					$altTitle->addAttribute("type", "alternative");
+					$altTitle->addChild("namePart", $title);
+				}
+			} else {
+				$primaryTitle = $output_nodes["collection"]->addChild("name");
+				$primaryTitle->addAttribute("type", "primary");
+				$primaryTitle->addChild("namePart", $title);
+				
+				$output_nodes["citation_metadata"]->addChild("title", $title);
+			}
+		}
 	}
 	
 	private function process_publisher($input_node, $output_nodes) {
@@ -128,7 +155,8 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_publicationYear($input_node, $output_nodes) {
-		
+		$published = $output_nodes["citation_metadata"]->addChild("date", (string) $input_node);
+		$published->addAttribute("type", "publicationDate");
 	}
 	
 	private function process_subjects($input_node, $output_nodes) {
