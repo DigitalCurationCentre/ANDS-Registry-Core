@@ -109,6 +109,57 @@ class DataCite3ToRifcs extends Crosswalk {
 		return $idType;
 	}
 	
+	private function translateSchemeType($string) {
+		$scheme = "local";
+		// This will need to be adapted in response to usage in the wild.
+		$schemeTypes = array(
+			"ACM Computing Classification System" => "acmccs",
+			"AGRICOLA" => "agricola",
+			"AGRIS" => "agrissc",
+			"The Alpha-Numeric System for Classification of Recordings" => "anscr",
+			"British Catalogue of Music Classification" => "bcmc",
+			"BISAC" => "bisacsh",
+			"BLISS" => "bliss",
+			"CELEX" => "celex",
+			"Cutter" => "cutterec",
+			"DDC" => "ddc",
+			"International Federation of Film Archives" => "fiaf",
+			"GFDC" => "gfdc",
+			"International Classification for Standards" => "ics",
+			"INSPEC" => "inspec",
+			"International Patent Classification" => "ipc",
+			"JEL" => "jelc",
+			"Library of Congress Classification" => "lcc",
+			"LCSH" => "lcsh",
+			"Moys" => "moys",
+			"Mathematical Subject Classification" => "msc",
+			"MESH" => "mesh",
+			"NH Classification for Photography" => "nhcp",
+			"NICEM" => "nicem",
+			"NLM" => "nlm",
+			"RILM" => "rilm",
+			"UDC" => "udc",
+			"UK Standard Library Categories" => "ukslc",
+			"UNESCO Thesaurus" => "unescot",
+		);
+		if (isset($schemeTypes[$string])) {
+			$scheme = $schemeTypes[$string];
+		}
+		return $scheme;
+	}
+	
+	private function translateSchemeUri($string) {
+		$scheme = "local";
+		// This will need to be adapted in response to usage in the wild.
+		$schemeUris = array(
+			"http://id.loc.gov/authorities/subjects" => "lcsh",
+		);
+		if (isset($schemeUris[$string])) {
+			$scheme = $schemeUris[$string];
+		}
+		return $scheme;
+	}
+	
 	private function process_identifier($input_node, $output_nodes) {
 		$id = $output_nodes["collection"]->addChild("identifier", (string) $input_node);
 		$idType = $this->translateIdentifierType((string) $input_node["identifierType"]);
@@ -160,7 +211,16 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_subjects($input_node, $output_nodes) {
-		
+		foreach ($input_node->children() as $subject) {
+			$term = $output_nodes["collection"]->addChild("subject", (string) $subject);
+			$scheme = "local";
+			if (isset($subject["schemeURI"])) {
+				$scheme = $this->translateSchemeUri((string) $subject["schemeURI"]);
+			} elseif (isset($subject["subjectScheme"])) {
+				$scheme = $this->translateSchemeType((string) $subject["subjectScheme"]);
+			}
+			$term->addAttribute("type", $scheme);
+		}
 	}
 	
 	private function process_contributors($input_node, $output_nodes) {
