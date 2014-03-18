@@ -4,9 +4,6 @@ class OaiDcToRifcs extends Crosswalk {
 
 	private $oaipmh = null;
 	private $rifcs = null;
-	private $oaiProviders = array(
-		"https://radar.brookes.ac.uk/radar/oai" => "Oxford Brookes University",
-	);
 	
 	function __construct(){
 		require_once(REGISTRY_APP_PATH . "core/crosswalks/_crosswalk_helper.php");
@@ -45,8 +42,8 @@ class OaiDcToRifcs extends Crosswalk {
 				continue;
 			}
 			$reg_obj = $this->rifcs->addChild("registryObject");
-			if (isset($this->oaiProviders[(string) $this->oaipmh->request])) {
-				$reg_obj->addAttribute("group", $this->oaiProviders[(string) $this->oaipmh->request]);
+			if (isset(CrosswalkHelper::$oaipmhProviders[(string) $this->oaipmh->request])) {
+				$reg_obj->addAttribute("group", CrosswalkHelper::$oaipmhProviders[(string) $this->oaipmh->request]);
 			} else {
 				$reg_obj->addAttribute("group", $this->oaipmh->request);
 			}
@@ -78,8 +75,8 @@ class OaiDcToRifcs extends Crosswalk {
 					);
 				}
 			}
-			if ($citation_metadata->publisher === null && isset($this->oaiProviders[(string) $this->oaipmh->request])) {
-				$citation_metadata->addChild("publisher", $this->oaiProviders[(string) $this->oaipmh->request]);
+			if ($citation_metadata->publisher === null && isset(CrosswalkHelper::$oaipmhProviders[(string) $this->oaipmh->request])) {
+				$citation_metadata->addChild("publisher", CrosswalkHelper::$oaipmhProviders[(string) $this->oaipmh->request]);
 			}
 			/* Processing contributor names is deferred till now to ensure
 			 * they come after creator names.

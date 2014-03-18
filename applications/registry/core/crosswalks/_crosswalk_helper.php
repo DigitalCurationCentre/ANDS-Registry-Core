@@ -2,6 +2,15 @@
 
 class CrosswalkHelper {
 
+	public static $oaipmhProviders = array(
+		"http://oai.ukdataservice.ac.uk/oai/provider" => "UK Data Archive",
+		"https://radar.brookes.ac.uk/radar/oai" => "Oxford Brookes University",
+		"http://hydra-oai-pmh.hull.ac.uk/oaiprovider/" => "University of Hull",
+		"http://databank.ora.ox.ac.uk/oaipmh" => "University of Oxford",
+		"http://researchdata.gla.ac.uk/cgi/oai2" => "University of Glasgow",
+		"http://eprints.lincoln.ac.uk/cgi/oai2" => "University of Lincoln",
+	);
+	
 	const RIFCS_WRAPPER="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n
 		<registryObjects xmlns=\"http://ands.org.au/standards/rif-cs/registryObjects\"
 		xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"

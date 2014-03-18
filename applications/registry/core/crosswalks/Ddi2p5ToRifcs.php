@@ -4,9 +4,6 @@ class Ddi2p5ToRifcs extends Crosswalk {
 
 	private $oaipmh = null;
 	private $rifcs = null;
-	private $ddiProviders = array(
-		"http://oai.ukdataservice.ac.uk/oai/provider" => "UK Data Archive",
-	);
 	
 	function __construct(){
 		require_once(REGISTRY_APP_PATH . "core/crosswalks/_crosswalk_helper.php");
@@ -56,8 +53,8 @@ class Ddi2p5ToRifcs extends Crosswalk {
 				continue;
 			}
 			$reg_obj = $this->rifcs->addChild("registryObject");
-			if (array_key_exists((string) $this->oaipmh->request, $this->ddiProviders)) {
-				$reg_obj->addAttribute("group", $this->ddiProviders[(string) $this->oaipmh->request]);
+			if (array_key_exists((string) $this->oaipmh->request, CrosswalkHelper::$oaipmhProviders)) {
+				$reg_obj->addAttribute("group", CrosswalkHelper::$oaipmhProviders[(string) $this->oaipmh->request]);
 			}
 			$key = $reg_obj->addChild("key", $record->header->identifier);
 			$originatingSource = $reg_obj->addChild("originatingSource", $this->oaipmh->request);
@@ -126,10 +123,10 @@ class Ddi2p5ToRifcs extends Crosswalk {
 					break;
 				}
 			}
-			if ($ctrb_obj === null) {
+			if ($new_ctrb) {
 				$ctrb_obj = $this->rifcs->addChild("registryObject");
-				if (array_key_exists((string) $this->oaipmh->request, $this->ddiProviders)) {
-					$ctrb_obj->addAttribute("group", $this->ddiProviders[(string) $this->oaipmh->request]);
+				if (array_key_exists((string) $this->oaipmh->request, CrosswalkHelper::$oaipmhProviders)) {
+					$ctrb_obj->addAttribute("group", CrosswalkHelper::$oaipmhProviders[(string) $this->oaipmh->request]);
 				}
 				$ctrb_obj->addChild("key", $id);
 				$ctrb_obj->addChild("originatingSource", $this->oaipmh->request);
