@@ -55,7 +55,6 @@ class DataCite3ToRifcs extends Crosswalk {
 			$citation = $coll->addChild("citationInfo");
 			$citation_metadata = $citation->addChild("citationMetadata");
 			$coverage = $coll->addChild("coverage");
-			$rights = $coll->addChild("rights");
 			$contributors = array();
 			foreach ($record->metadata->oai_datacite->payload->resource->children() as $node) {
 				$func = "process_".$node->getName();
@@ -69,7 +68,6 @@ class DataCite3ToRifcs extends Crosswalk {
 							"collection" => $coll,
 							"citation_metadata" => $citation_metadata,
 							"coverage" => $coverage,
-							"rights" => $rights,
 							"contributors" => &$contributors
 						)
 					);
@@ -290,7 +288,11 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_alternateIdentifiers($input_node, $output_nodes) {
-		
+		foreach ($input_node->children() as $node) {
+			$idType = $this->translateIdentifierType((string) $node["alternateIdentifierType"]);
+			$id = $output_nodes["collection"]->addChild("identifier", (string) $node);
+			$id->addAttribute("type", $idType);
+		}
 	}
 	
 	private function process_relatedIdentifiers($input_node, $output_nodes) {
@@ -306,11 +308,28 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_version($input_node, $output_nodes) {
-		
+		$output_nodes["citation_metadata"]->addChild("version", (string) $input_node);
 	}
 	
 	private function process_rightsList($input_node, $output_nodes) {
-		
+		foreach ($input_node->children() as $node) {
+			$this->process_rights($node, $output_nodes);
+		}
+	}
+	
+	private function process_rights($input_node, $output_nodes) {
+		$rightsString = (string) $input_node;
+		$rightsUri = null;
+		if (isset($input_node["rightsURI"])) {
+			$rightsUri = $input_node["rightsURI"];
+		} elseif (CrosswalkHelper::isUrl($rightsString)) {
+			$rightsUri = $rightsString;
+		}
+		$rights = $output_nodes["collection"]->addChild("rights");
+		$rightsStmt = $rights->addChild("rightsStatement", $rightsString);
+		if ($rightsUri) {
+			$rightsStmt->addAttribute("rightsUri", $rightsUri);
+		}
 	}
 	
 	private function process_descriptions($input_node, $output_nodes) {
