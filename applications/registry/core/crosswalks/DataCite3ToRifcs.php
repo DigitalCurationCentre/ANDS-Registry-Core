@@ -85,6 +85,19 @@ class DataCite3ToRifcs extends Crosswalk {
 		}
 	}
 	
+	private function addDate($node, $type, $valueFrom, $valueTo = FALSE) {
+		$dates = $node->addChild("dates");
+		$dates->addAttribute("type", $type);
+		$dates_dateFrom = $dates->addChild("date", $valueFrom);
+		$dates_dateFrom->addAttribute("type", "dateFrom");
+		$dates_dateFrom->addAttribute("dateFormat", "W3CDTF");
+		if ($valueTo) {
+			$dates_dateTo = $dates->addChild("date", $valueTo);
+			$dates_dateTo->addAttribute("type", "dateTo");
+			$dates_dateTo->addAttribute("dateFormat", "W3CDTF");
+		}
+	}
+	
 	private function translateIdentifierType($string){
 		$idType = "local";
 		$idTypes = array(
@@ -228,7 +241,44 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_dates($input_node, $output_nodes) {
-		
+		$dateTypes = array(
+			"Available" => "available",
+			"Created" => "created",
+			"Accepted" => "dateAccepted",
+			"Submitted" => "dateSubmitted",
+			"Issued" => "issued",
+			"Updated" => "modified",
+			"Valid" => "valid",
+		);
+		foreach ($input_node->children() as $node) {
+			$dateTypeString = (string) $node["dateType"];
+			$dateFrom = FALSE;
+			$dateTo = FALSE;
+			// Single date or range?
+			if ($divider = strpos((string) $node, '/')) {
+				$dateFromString = substr((string) $node, 0, $divider);
+				$dateFromStamp = strtotime($dateFromString);
+				$dateToString = substr((string) $node, $divider);
+				$dateToStamp = strtotime($dateToString);
+				if ($dateToStamp) {
+					$dateTo = date(DATE_W3C, $dateFromStamp);
+				}
+			} else {
+				$dateFromStamp = strtotime((string) $node);
+			}
+			if ($dateFromStamp) {
+				$dateFrom = date(DATE_W3C, $dateFromStamp);
+			}
+			if ($dateFrom) {
+				if (isset($dateTypes[$dateTypeString])) {
+					if ($dateTypes[$dateTypeString] != "modified") {
+						$this->addDate($output_nodes["collection"], "dc." . $dateTypes[$dateTypeString], $dateFrom, $dateTo);
+					}
+					$cite_date = $output_nodes["citation_metadata"]->addChild("date", $dateFrom);
+					$cite_date->addAttribute("type", $dateTypes[$dateTypeString]);
+				}
+			}
+		}
 	}
 	
 	private function process_language($input_node, $output_nodes) {
