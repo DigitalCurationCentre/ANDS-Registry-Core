@@ -23,7 +23,7 @@ class CrosswalkHelper {
 	}
 	
 	public static function escapeAmpersands($string){
-		return str_replace("&", "&amp;", $string);
+		return addslashes(str_replace("&", "&amp;", $string));
 	}
 	
 	public static function isUrl($string){
