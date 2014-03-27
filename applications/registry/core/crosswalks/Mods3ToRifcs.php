@@ -85,8 +85,55 @@ class Mods3ToRifcs extends Crosswalk {
 		}
 	}
 	
+	private function parseDateString($string) {
+		$dateFrom = null;
+		$dateTo = null;
+		if (preg_match('~\d{4}-\d{4}~', $string, $matches)) {
+			$dateFrom = $matches[1];
+			$dateTo = $matches[2];
+		} elseif (preg_match('~(\d{4}(?:-\d{2}(?:-\d{2})?)?)/(\d{4}(?:-\d{2}(?:-\d{2})?)?)~', $string, $matches)) {
+			$dateFrom = $matches[1];
+			$dateTo = $matches[2];
+		} else {
+			$dateFrom = $string;
+		}
+		return array("dateFrom" => $dateFrom, "dateTo" => $dateTo);
+	}
+	
+	private function addDate($node, $type, $valueFrom, $valueTo = FALSE) {
+		if ($node->getName() == "coverage") {
+			$dates = $node->addChild("temporal");
+		} else {
+			$dates = $node->addChild("dates");
+			$dates->addAttribute("type", $type);
+		}
+		$dates_dateFrom = $dates->addChild("date", $valueFrom);
+		$dates_dateFrom->addAttribute("type", "dateFrom");
+		$dates_dateFrom->addAttribute("dateFormat", "W3CDTF");
+		if ($valueTo) {
+			$dates_dateTo = $dates->addChild("date", $valueTo);
+			$dates_dateTo->addAttribute("type", "dateTo");
+			$dates_dateTo->addAttribute("dateFormat", "W3CDTF");
+		}
+	}
+	
 	private function process_titleInfo($input_node, $output_nodes) {
-		
+		foreach ($input_node->children() as $node) {
+			$i = 0;
+			if ($node->getName() == "title") {
+				if ($i == 0) {
+					$name = $output_nodes["collection"]->addChild("name");
+					$name->addAttribute("type", "primary");
+					$name->addChild("namePart", $node);
+					$output_nodes["citation_metadata"]->addChild("title", $node);
+				} else {
+					$name = $output_nodes["collection"]->addChild("name");
+					$name->addAttribute("type", "alternative");
+					$name->addChild("namePart", $node);
+				}
+				$i++;
+			}
+		}
 	}
 
 	private function process_name($input_node, $output_nodes) {
@@ -102,7 +149,104 @@ class Mods3ToRifcs extends Crosswalk {
 	}
 
 	private function process_originInfo($input_node, $output_nodes) {
-		
+		// Dates collected first and used later
+		$originDates = array();
+		foreach($input_node->children() as $node) {
+			switch ($node->getName()) {
+			case "place":
+				if (empty($input_node->eventType) || $input_node->eventType == "publication") {
+					foreach($node->children() as $subnode) {
+						if ($subnode->getName() == "placeTerm") {
+							if (empty($subnode->type) || $subnode->type == "text") {
+								$output_nodes["citation_metadata"]->addChild("placePublished", $subnode);
+							}
+						}
+					}
+				}
+				break;
+			case "dateIssued":
+				if (empty($node->point)) {
+					$parsedDate = $this->parseDateString((string) $node);
+					$originDate = array(
+						"dateFrom" => $parsedDate["dateFrom"],
+						"dateTo" => $parsedDate["dateTo"]
+					);
+					$originDates["issued"] = $originDate;
+				} else {
+					if ($node->point == "start") {
+						$originDates["issued"]["dateFrom"] = (string) $node;
+					} elseif ($node->point == "end") {
+						$originDates["issued"]["dateTo"] = (string) $node;
+					}
+				}
+				break;
+			case "dateCreated":
+				if (empty($node->point)) {
+					$parsedDate = $this->parseDateString((string) $node);
+					$originDate = array(
+						"dateFrom" => $parsedDate["dateFrom"],
+						"dateTo" => $parsedDate["dateTo"]
+					);
+					$originDates["created"] = $originDate;
+				} else {
+					if ($node->point == "start") {
+						$originDates["created"]["dateFrom"] = (string) $node;
+					} elseif ($node->point == "end") {
+						$originDates["created"]["dateTo"] = (string) $node;
+					}
+				}
+				break;
+			case "dateValid":
+				if (empty($node->point)) {
+					$parsedDate = $this->parseDateString((string) $node);
+					$originDate = array(
+						"dateFrom" => $parsedDate["dateFrom"],
+						"dateTo" => $parsedDate["dateTo"]
+					);
+					$originDates["valid"] = $originDate;
+				} else {
+					if ($node->point == "start") {
+						$originDates["valid"]["dateFrom"] = (string) $node;
+					} elseif ($node->point == "end") {
+						$originDates["valid"]["dateTo"] = (string) $node;
+					}
+				}
+				break;
+			case "dateModified":
+				if (empty($node->point)) {
+					$parsedDate = $this->parseDateString((string) $node);
+					$originDate = array(
+						"dateFrom" => $parsedDate["dateFrom"],
+						"dateTo" => $parsedDate["dateTo"]
+					);
+					$originDates["modified"] = $originDate;
+				} else {
+					if ($node->point == "start") {
+						$originDates["modified"]["dateFrom"] = (string) $node;
+					} elseif ($node->point == "end") {
+						$originDates["modified"]["dateTo"] = (string) $node;
+					}
+				}
+				break;
+			case "edition":
+				if (empty($output_nodes["citation_metadata"]->version)) {
+					$output_nodes["citation_metadata"]->addChild("version", $node);
+				}
+				break;
+			}
+		}
+		foreach ($originDates as $type => $originDate) {
+			if ($type != "modified") {
+				$this->addDate(
+					$output_nodes["collection"],
+					"dc." + $type,
+					$originDate["dateFrom"],
+					$originDate["dateTo"]
+				);
+			}
+			$date = $output_nodes["citation_metadata"]->addChild("date", $originDate["dateFrom"]);
+			$date->addAttribute("type", $type);
+		}
 	}
 
 	private function process_language($input_node, $output_nodes) {
