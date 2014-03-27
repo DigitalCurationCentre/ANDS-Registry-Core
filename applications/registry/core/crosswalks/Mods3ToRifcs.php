@@ -290,7 +290,32 @@ class Mods3ToRifcs extends Crosswalk {
 	}
 
 	private function process_location($input_node, $output_nodes) {
-		
+		$locationUrls = array();
+		foreach ($input_node->children() as $node) {
+			if ($node->getName() == "url") {
+				if (empty($node->usage)) {
+					$locationUrls["unknown"] = (string) $node;
+				} else {
+					$locationUrls[(string) $node->usage] = (string) $node;
+				}
+			}
+			$loc = $output_nodes["collection"]->addChild("location");
+			$addr = $loc->addChild("address");
+			$elec = $addr->addChild("electronic");
+			$elec->addAttribute("type", "url");
+			$elec->addChild("value", $url);
+		}
+		$url = null;
+		$urlTypeArray = array("primary", "primary display", "unknown");
+		foreach ($urlTypeArray as $urlType) {
+			if (isset($urlArray[$urlType])) {
+				$url = $urlArray[$urlType];
+				break;
+			}
+		}
+		if ($url) {
+			$output_nodes["citation_metadata"]->addChild("url", $url);
+		}
 	}
 
 	private function process_accessCondition($input_node, $output_nodes) {
