@@ -297,7 +297,21 @@ class Mods3ToRifcs extends Crosswalk {
 	}
 
 	private function process_abstract($input_node, $output_nodes) {
-		
+		if (isset($input_node["type"])) {
+			switch ($input_node["type"]) {
+			case "content":
+				$desc = $output_nodes["collection"]->addChild("description", $input_node);
+				$desc->addAttribute("type", "full");
+				break;
+			case "review":
+				$desc = $output_nodes["collection"]->addChild("description", $input_node);
+				$desc->addAttribute("type", "significanceStatement");
+				break;
+			}
+		} else {
+			$desc = $output_nodes["collection"]->addChild("description", $input_node);
+			$desc->addAttribute("type", "full");
+		}
 	}
 
 	private function process_tableOfContents($input_node, $output_nodes) {
@@ -309,7 +323,22 @@ class Mods3ToRifcs extends Crosswalk {
 	}
 
 	private function process_note($input_node, $output_nodes) {
-		
+		if (isset($input_node["type"])) {
+			switch ($input_node["type"]) {
+			case "conservation history":
+				$desc = $output_nodes["collection"]->addChild("description", $input_node);
+				$desc->addAttribute("type", "lineage");
+				break;
+			case "version identification":
+				if (empty($output_nodes["citation_metadata"]->version)) {
+					$output_nodes["citation_metadata"]->addChild("version", $input_node);
+				}
+				break;
+			}
+		} else {
+			$desc = $output_nodes["collection"]->addChild("description", $input_node);
+			$desc->addAttribute("type", "note");
+		}
 	}
 
 	private function process_subject($input_node, $output_nodes) {
