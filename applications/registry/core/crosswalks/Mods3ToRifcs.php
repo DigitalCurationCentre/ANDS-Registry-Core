@@ -239,7 +239,7 @@ class Mods3ToRifcs extends Crosswalk {
 			switch ($node->getName()) {
 			case "namePart":
 				if (isset($node["type"])) {
-					$partyArray["name"][$node["type"]] = (string) $node;
+					$partyArray["name"][(string) $node["type"]] = (string) $node;
 				} elseif ($partyArray["type"] == "person") {
 					if (preg_match("/(.+), ?([^,]+)(?:, ?([^,]+))?/", (string) $node, $matches)) {
 						$partyArray["name"]["family"] = $matches[1];
@@ -255,17 +255,21 @@ class Mods3ToRifcs extends Crosswalk {
 				}
 				break;
 			case "role":
-				switch ((string) $node) {
-				case "Author":
-				case "author":
-				case "aut":
-					$partyArray["role"] = "author";
-					break;
-				case "Publisher":
-				case "pbl":
-					$partyArray["role"] = "publisher";
-					break;
-				// More cases may need to be added, depending on real world usage
+				foreach($node->children() as $subnode) {
+					if ($subnode->getName() == "roleTerm") {
+						switch ((string) $subnode) {
+						case "Author":
+						case "author":
+						case "aut":
+							$partyArray["role"] = "author";
+							break;
+						case "Publisher":
+						case "pbl":
+							$partyArray["role"] = "publisher";
+							break;
+						// More cases may need to be added, depending on real world usage
+						}
+					}
 				}
 				break;
 			}
@@ -286,7 +290,7 @@ class Mods3ToRifcs extends Crosswalk {
 			case "author":
 				$ctrb = $output_nodes["citation_metadata"]->addChild("contributor");
 				foreach($partyArray["name"] as $type => $part) {
-					$namePart = $ctrb->addChild("namePart", $namePart);
+					$namePart = $ctrb->addChild("namePart", $part);
 					if ($type != "whole") {
 						$namePart->addAttribute("type", $type);
 					}
@@ -297,7 +301,7 @@ class Mods3ToRifcs extends Crosswalk {
 				break;
 			case "publisher":
 				if (empty($output_nodes["citation_metadata"]->publisher)) {
-					$output_nodes["citation_metadata"]->addChild("publisher", $hashString);
+					$output_nodes["citation_metadata"]->addChild("publisher", CrosswalkHelper::escapeAmpersands($hashString));
 				}
 				break;
 			}
@@ -574,7 +578,7 @@ class Mods3ToRifcs extends Crosswalk {
 	private function process_relatedItem($input_node, $output_nodes) {
 		$relInfo = $output_nodes["collection"]->addChild("relatedInfo");
 		if (isset($input_node["type"])) {
-			$relType = $input_node["type"];
+			$relType = (string) $input_node["type"];
 			$relTypes = array(
 				"original" => "isDerivedFrom",
 				"host" => "isPartOf",
@@ -598,7 +602,7 @@ class Mods3ToRifcs extends Crosswalk {
 				$rel_id = $relInfo->addChild("identifier", $node);
 				$rel_idType = "local";
 				if (isset($node["type"])) {
-					$rel_idType = $this->translateIdentifierType($node["type"]);
+					$rel_idType = $this->translateIdentifierType((string) $node["type"]);
 				}
 				$rel_id->addAttribute("type", $rel_idType);
 				break;
@@ -624,10 +628,10 @@ class Mods3ToRifcs extends Crosswalk {
 				}
 				break;
 			case "physicalDescription":
-				foreach($subnode->children() as $subsubnode) {
-					if ($subsubnode->getName() == "internetMediaType") {
+				foreach($node->children() as $subnode) {
+					if ($subnode->getName() == "internetMediaType") {
 						$format = $relInfo->addChild("format");
-						$fmt_id = $format->addChild("identifier", $subsubnode);
+						$fmt_id = $format->addChild("identifier", $subnode);
 						$fmt_id->addAttribute("type", "mediaType");
 					}
 				}
@@ -640,7 +644,7 @@ class Mods3ToRifcs extends Crosswalk {
 		$id = $output_nodes["collection"]->addChild("identifier", $input_node);
 		$idType = "local";
 		if (isset($input_node["type"])) {
-			$idType = $this->translateIdentifierType($input_node["type"]);
+			$idType = $this->translateIdentifierType((string) $input_node["type"]);
 		}
 		$id->addAttribute("type", $idType);
 	}
@@ -659,7 +663,7 @@ class Mods3ToRifcs extends Crosswalk {
 			$addr = $loc->addChild("address");
 			$elec = $addr->addChild("electronic");
 			$elec->addAttribute("type", "url");
-			$elec->addChild("value", $url);
+			$elec->addChild("value", (string) $node);
 		}
 		$url = null;
 		$urlTypeArray = array("primary", "primary display", "unknown");
