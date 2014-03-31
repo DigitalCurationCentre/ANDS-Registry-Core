@@ -348,14 +348,6 @@ class Mods3ToRifcs extends Crosswalk {
 		}
 	}
 
-	private function process_typeOfResource($input_node, $output_nodes) {
-		
-	}
-
-	private function process_genre($input_node, $output_nodes) {
-		
-	}
-
 	private function process_originInfo($input_node, $output_nodes) {
 		// Dates collected first and used later
 		$originDates = array();
@@ -474,14 +466,6 @@ class Mods3ToRifcs extends Crosswalk {
 		}
 	}
 
-	private function process_language($input_node, $output_nodes) {
-		
-	}
-
-	private function process_physicalDescription($input_node, $output_nodes) {
-		
-	}
-
 	private function process_abstract($input_node, $output_nodes) {
 		if (isset($input_node["type"])) {
 			switch ($input_node["type"]) {
@@ -498,14 +482,6 @@ class Mods3ToRifcs extends Crosswalk {
 			$desc = $output_nodes["collection"]->addChild("description", $input_node);
 			$desc->addAttribute("type", "full");
 		}
-	}
-
-	private function process_tableOfContents($input_node, $output_nodes) {
-		
-	}
-
-	private function process_targetAudience($input_node, $output_nodes) {
-		
 	}
 
 	private function process_note($input_node, $output_nodes) {
@@ -593,10 +569,6 @@ class Mods3ToRifcs extends Crosswalk {
 			$spatial = $output_nodes["coverage"]->addChild("spatial", $parsedCoords["data"]);
 			$spatial->addAttribute("type", $parsedCoords["type"]);
 		}
-	}
-
-	private function process_classification($input_node, $output_nodes) {
-		
 	}
 
 	private function process_relatedItem($input_node, $output_nodes) {
@@ -716,18 +688,6 @@ class Mods3ToRifcs extends Crosswalk {
 			$licence->addAttribute("rightsUri", $matches[1]);
 			$licence->addAttribute("type", strtoupper($matches[2]));
 		}
-	}
-
-	private function process_part($input_node, $output_nodes) {
-		
-	}
-
-	private function process_extension($input_node, $output_nodes) {
-		
-	}
-
-	private function process_recordInfo($input_node, $output_nodes) {
-		
 	}
 
 }
