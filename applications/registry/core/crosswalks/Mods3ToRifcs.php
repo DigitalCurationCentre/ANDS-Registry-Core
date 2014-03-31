@@ -117,22 +117,61 @@ class Mods3ToRifcs extends Crosswalk {
 		}
 	}
 	
-	private function process_titleInfo($input_node, $output_nodes) {
-		foreach ($input_node->children() as $node) {
-			$i = 0;
-			if ($node->getName() == "title") {
-				if ($i == 0) {
-					$name = $output_nodes["collection"]->addChild("name");
-					$name->addAttribute("type", "primary");
-					$name->addChild("namePart", $node);
-					$output_nodes["citation_metadata"]->addChild("title", $node);
-				} else {
-					$name = $output_nodes["collection"]->addChild("name");
-					$name->addAttribute("type", "alternative");
-					$name->addChild("namePart", $node);
+	private function parseCoordinates($array) {
+		$rawCoords = $array;
+		$parsedCoords = array("type" => "text", "data" => "");
+		// Single element: one coordinate or a whole set?
+		if (count($array) == 1 && !preg_match("~(-\d\.)+ (-\d\.)+~")) {
+			// Probably a whole set. Assume they are space delimited.
+			$rawCoords = explode(" ", $array[0]);
+		}
+		$countCoords = count($rawCoords);
+		if ($countCoords == 1 && preg_match('~(-?\d+(?:\.\d+)?)[,\s](-?\d+(?:\.\d+)?)~', $rawCoords[0], $matches)) {
+			$parsedCoords["type"] = "dcmiPoint";
+			$parsedCoords["data"] = "north={$matches[1]}; east={$matches[2]}";
+		} elseif ($countCoords > 2) {
+			$coords = array();
+			foreach ($rawCoords as $coord) {
+				if (preg_match('~(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:,(-?\d+(?:\.\d+)?))?~', $coord, $matches)) {
+					if (isset($matches[3])) {
+						$coords[] = "{$matches[1]},{$matches[2]},{$matches[3]}";
+					} else {
+						$coords[] = "{$matches[1]},{$matches[2]},0";
+					}
 				}
-				$i++;
 			}
+			$parsedCoords["type"] = "kmlPolyCoords";
+			$parsedCoords["data"] = implode(' ', $coords);
+		}
+		return $parsedCoords;
+	}
+	
+	private function process_titleInfo($input_node, $output_nodes) {
+		// There should be just one title and at most one subtitle per info block
+		$title = null;
+		$subtitle = null;
+		foreach ($input_node->children() as $node) {
+			switch ($node->getName()) {
+			case "title":
+				$title = (string) $node;
+				break;
+			case "subTitle":
+				$subtitle = (string) $node;
+				break;
+			}
+		}
+		if ($subtitle) {
+			$title += ": $subtitle";
+		}
+		if (empty($input_node->type)) {
+			$name = $output_nodes["collection"]->addChild("name");
+			$name->addAttribute("type", "primary");
+			$name->addChild("namePart", $title);
+			$output_nodes["citation_metadata"]->addChild("title", $title);
+		} else {
+			$name = $output_nodes["collection"]->addChild("name");
+			$name->addAttribute("type", "alternative");
+			$name->addChild("namePart", $title);
 		}
 	}
 
@@ -165,7 +204,7 @@ class Mods3ToRifcs extends Crosswalk {
 				}
 				break;
 			case "dateIssued":
-				if (empty($node->point)) {
+				if (empty($node["point"])) {
 					$parsedDate = $this->parseDateString((string) $node);
 					$originDate = array(
 						"dateFrom" => $parsedDate["dateFrom"],
@@ -173,15 +212,15 @@ class Mods3ToRifcs extends Crosswalk {
 					);
 					$originDates["issued"] = $originDate;
 				} else {
-					if ($node->point == "start") {
+					if ($node["point"] == "start") {
 						$originDates["issued"]["dateFrom"] = (string) $node;
-					} elseif ($node->point == "end") {
+					} elseif ($node["point"] == "end") {
 						$originDates["issued"]["dateTo"] = (string) $node;
 					}
 				}
 				break;
 			case "dateCreated":
-				if (empty($node->point)) {
+				if (empty($node["point"])) {
 					$parsedDate = $this->parseDateString((string) $node);
 					$originDate = array(
 						"dateFrom" => $parsedDate["dateFrom"],
@@ -189,15 +228,15 @@ class Mods3ToRifcs extends Crosswalk {
 					);
 					$originDates["created"] = $originDate;
 				} else {
-					if ($node->point == "start") {
+					if ($node["point"] == "start") {
 						$originDates["created"]["dateFrom"] = (string) $node;
-					} elseif ($node->point == "end") {
+					} elseif ($node["point"] == "end") {
 						$originDates["created"]["dateTo"] = (string) $node;
 					}
 				}
 				break;
 			case "dateValid":
-				if (empty($node->point)) {
+				if (empty($node["point"])) {
 					$parsedDate = $this->parseDateString((string) $node);
 					$originDate = array(
 						"dateFrom" => $parsedDate["dateFrom"],
@@ -205,15 +244,15 @@ class Mods3ToRifcs extends Crosswalk {
 					);
 					$originDates["valid"] = $originDate;
 				} else {
-					if ($node->point == "start") {
+					if ($node["point"] == "start") {
 						$originDates["valid"]["dateFrom"] = (string) $node;
-					} elseif ($node->point == "end") {
+					} elseif ($node["point"] == "end") {
 						$originDates["valid"]["dateTo"] = (string) $node;
 					}
 				}
 				break;
 			case "dateModified":
-				if (empty($node->point)) {
+				if (empty($node["point"])) {
 					$parsedDate = $this->parseDateString((string) $node);
 					$originDate = array(
 						"dateFrom" => $parsedDate["dateFrom"],
@@ -221,9 +260,9 @@ class Mods3ToRifcs extends Crosswalk {
 					);
 					$originDates["modified"] = $originDate;
 				} else {
-					if ($node->point == "start") {
+					if ($node["point"] == "start") {
 						$originDates["modified"]["dateFrom"] = (string) $node;
-					} elseif ($node->point == "end") {
+					} elseif ($node["point"] == "end") {
 						$originDates["modified"]["dateTo"] = (string) $node;
 					}
 				}
@@ -274,6 +313,71 @@ class Mods3ToRifcs extends Crosswalk {
 	}
 
 	private function process_subject($input_node, $output_nodes) {
+		// For subjects
+		$auth = "local";
+		if (isset($input_node["authority"])) {
+			$auth = $input_node["authority"];
+		}
+		// For temporal coverage
+		$coverageDates = array("dateFrom" => null, "dateTo" => null);
+		// For coordinates
+		$coords = array();
+		// Now we can begin
+		foreach ($input_node->children() as $node) {
+			switch ($node->getName()) {
+			case "topic":
+				$subject = $output_nodes["collection"]->addChild("subject", $node);
+				$subjectType = $auth;
+				if (isset($node["authority"])) {
+					$subjectType = $node["authority"];
+				}
+				$subject->addAttribute("type", $subjectType);
+				if (isset($node["valueURI"])) {
+					$subject->addAttribute("termIdentifier", $node["valueURI"]);
+				}
+				break;
+			case "geographic":
+				$spatial = $output_nodes["coverage"]->addChild("spatial", $node);
+				$spatial->addAttribute("type", "text");
+				break;
+			case "temporal":
+				if (empty($node["point"])) {
+					$coverageDates = $this->parseDateString((string) $node);
+				} else {
+					if ($node["point"] == "start") {
+						$coverageDates["dateFrom"] = (string) $node;
+					} elseif ($node["point"] == "end") {
+						$coverageDates["dateTo"] = (string) $node;
+					}
+				}
+				break;
+			case "cartographics":
+				foreach ($node->children() as $subnode) {
+					if ($subnode->getName() == "coordinates") {
+						$coords[] = (string) $subnode;
+					}
+				}
+				break;
+			case "geographicCode":
+				if (isset($subnode["authority"]) && $subnode["authority"] == "iso3166") {
+					$spatial = $output_nodes["coverage"]->addChild("spatial", $subnode);
+					if (strpos((string) $subnode, '-') === FALSE) {
+						$spatial->addAttribute("type", "iso31661");
+					} else {
+						$spatial->addAttribute("type", "iso31662");
+					}
+				}
+				break;
+			}
+		}
+		if (isset($coverageDates["dateFrom"])) {
+			$this->addDate($output_nodes["coverage"], "extent", $coverageDates["dateFrom"], $coverageDates["dateTo"]);
+		}
+		if (count($coords) > 0) {
+			$parsedCoords = $this->parseCoordinates($coords);
+			$spatial = $output_nodes["coverage"]->addChild("spatial", $parsedCoords["data"]);
+			$spatial->addAttribute("type", $parsedCoords["type"]);
+		}
 		
 	}
 
@@ -319,7 +423,9 @@ class Mods3ToRifcs extends Crosswalk {
 	}
 
 	private function process_accessCondition($input_node, $output_nodes) {
-		
+		if (empty($input_node->type)) {
+			
+		}
 	}
 
 	private function process_part($input_node, $output_nodes) {
