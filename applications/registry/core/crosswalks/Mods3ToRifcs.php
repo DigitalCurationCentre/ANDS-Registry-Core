@@ -378,7 +378,6 @@ class Mods3ToRifcs extends Crosswalk {
 			$spatial = $output_nodes["coverage"]->addChild("spatial", $parsedCoords["data"]);
 			$spatial->addAttribute("type", $parsedCoords["type"]);
 		}
-		
 	}
 
 	private function process_classification($input_node, $output_nodes) {
@@ -423,8 +422,18 @@ class Mods3ToRifcs extends Crosswalk {
 	}
 
 	private function process_accessCondition($input_node, $output_nodes) {
-		if (empty($input_node->type)) {
-			
+		if (isset($input_node["type"]) && $input_node["type"] == "restriction on access") {
+			$rights = $output_nodes["collection"]->addChild("rights");
+			$rights->addChild("accessRights", $input_node);
+		} else {
+			$rights = $output_nodes["collection"]->addChild("rights");
+			$rights->addChild("rightsStatement", $input_node);
+		}
+		// Here we recognise CC licences if they occur by URL in a licence statement.
+		if (preg_match('~(http://creativecommons.org/licenses/([^/]+)(?!@)?)~', (string) $input_node, $matches)) {
+			$licence = $rights->addChild("licence");
+			$licence->addAttribute("rightsUri", $matches[1]);
+			$licence->addAttribute("type", strtoupper($matches[2]));
 		}
 	}
 
