@@ -75,6 +75,17 @@ class Mods3ToRifcs extends Crosswalk {
 					);
 				}
 			}
+			$idTypes = array("doi", "handle", "uri", "isbn", "issn", "istc", "upc", "local");
+			$identifiers = $reg_obj->xpath("collection/identifier");
+			foreach($idTypes as $idType) {
+				foreach($identifiers as $identifier) {
+					if ($identifier["type"] == $idType) {
+						$id = $citation_metadata->addChild("identifier", $identifier);
+						$id->addAttribute("type", $idType);
+						break 2;
+					}
+				}
+			}
 		}
 		return $this->rifcs->asXML();
 	}
@@ -144,6 +155,41 @@ class Mods3ToRifcs extends Crosswalk {
 			$parsedCoords["data"] = implode(' ', $coords);
 		}
 		return $parsedCoords;
+	}
+	
+	private function translateIdentifierType($string){
+		$idType = "local";
+		$knownTypes = array(
+			"abn",
+			"arc",
+			"ark",
+			"AU-PNL:PEAU",
+			"doi",
+			"ean13",
+			"eissn",
+			"infouri",
+			"isbn",
+			"isil",
+			"issn",
+			"istc",
+			"lissn",
+			"nhmrc",
+			"orcid",
+			"purl",
+			"researcherID",
+			"upc",
+			"uri",
+			"urn"
+		);
+		$idTypes = array(
+			"hdl" => "handle",
+		);
+		if (in_array($string, $knownTypes)) {
+			$idType = $string;
+		} elseif (isset($idTypes[$string])) {
+			$idType = $idTypes[$string];
+		}
+		return $idType;
 	}
 	
 	private function process_titleInfo($input_node, $output_nodes) {
@@ -285,6 +331,18 @@ class Mods3ToRifcs extends Crosswalk {
 			}
 			$date = $output_nodes["citation_metadata"]->addChild("date", $originDate["dateFrom"]);
 			$date->addAttribute("type", $type);
+			if ($type = "issued") {
+				if ($originDate["dateTo"]) {
+					$dateStart = $output_nodes["citation_metadata"]->addChild("date", $originDate["dateFrom"]);
+					$dateStart->addAttribute("type", "startPublicationDate");
+					$dateEnd = $output_nodes["citation_metadata"]->addChild("date", $originDate["dateTo"]);
+					$dateEnd->addAttribute("type", "endPublicationDate");
+				} else {
+					$date = $output_nodes["citation_metadata"]->addChild("date", $originDate["dateFrom"]);
+					$date->addAttribute("type", "publicationDate");
+				}
+			}
+			
 		}
 	}
 
@@ -418,7 +476,12 @@ class Mods3ToRifcs extends Crosswalk {
 	}
 
 	private function process_identifier($input_node, $output_nodes) {
-		
+		$id = $output_nodes["collection"]->addChild("identifier", $input_node);
+		$idType = "local";
+		if (isset($input_node["type"])) {
+			$idType = $this->translateIdentifierType($input_node["type"]);
+		}
+		$id->addAttribute("type", $idType);
 	}
 
 	private function process_location($input_node, $output_nodes) {
