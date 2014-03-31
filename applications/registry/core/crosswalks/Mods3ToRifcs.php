@@ -222,7 +222,130 @@ class Mods3ToRifcs extends Crosswalk {
 	}
 
 	private function process_name($input_node, $output_nodes) {
-		
+		// First we collect the information
+		$partyArray = array();
+		if (isset($input_node["type"])) {
+			switch ($input_node["type"]) {
+			case "personal":
+				$partyArray["type"] = "person";
+				break;
+			case "corporate":
+				$partyArray["type"] = "group";
+				break;
+			}
+		}
+		$partyArray["name"] = array();
+		foreach ($input_node->children() as $node) {
+			switch ($node->getName()) {
+			case "namePart":
+				if (isset($node["type"])) {
+					$partyArray["name"][$node["type"]] = (string) $node;
+				} elseif ($partyArray["type"] == "person") {
+					if (preg_match("/(.+), ?([^,]+)(?:, ?([^,]+))?/", (string) $node, $matches)) {
+						$partyArray["name"]["family"] = $matches[1];
+						$partyArray["name"]["given"] = $matches[2];
+						if (isset($matches[3])) {
+							$partyArray["name"]["suffix"] = $matches[3];
+						}
+					} else {
+						$partyArray["name"]["whole"] = (string) $node;
+					}
+				} else {
+					$partyArray["name"]["whole"] = (string) $node;
+				}
+				break;
+			case "role":
+				switch ((string) $node) {
+				case "Author":
+				case "author":
+				case "aut":
+					$partyArray["role"] = "author";
+					break;
+				case "Publisher":
+				case "pbl":
+					$partyArray["role"] = "publisher";
+					break;
+				// More cases may need to be added, depending on real world usage
+				}
+				break;
+			}
+		}
+		$hashString = '';
+		if (isset($partyArray["name"]["whole"])) {
+			$hashString = $partyArray["name"]["whole"];
+		} elseif (isset($partyArray["name"]["given"]) && isset($partyArray["name"]["family"])) {
+			$hashString = $partyArray["name"]["given"] + " " + $partyArray["name"]["family"];
+			if (isset($partyArray["name"]["suffix"])) {
+				$hashString += " " + $partyArray["name"]["suffix"];
+			}
+		}
+		$isRelatedObject = FALSE;
+		$relation = array();
+		if (isset($partyArray["role"])) {
+			switch ($partyArray["role"]) {
+			case "author":
+				$ctrb = $output_nodes["citation_metadata"]->addChild("contributor");
+				foreach($partyArray["name"] as $type => $part) {
+					$namePart = $ctrb->addChild("namePart", $namePart);
+					if ($type != "whole") {
+						$namePart->addAttribute("type", $type);
+					}
+				}
+				$isRelatedObject = TRUE;
+				$relation["out"] = "hasPrincipalInvestigator";
+				$relation["in"] = "isPrincipalInvestigatorOf";
+				break;
+			case "publisher":
+				if (empty($output_nodes["citation_metadata"]->publisher)) {
+					$output_nodes["citation_metadata"]->addChild("publisher", $hashString);
+				}
+				break;
+			}
+		}
+		if ($isRelatedObject) {
+			$id = sha1($hashString);
+			if (isset($input_node["ID"])) {
+				$id = $input_node["ID"];
+			}
+			// Is this a new or existing party?
+			$ctrb_obj = null;
+			$ctrb_party = null;
+			$new_ctrb = true;
+			foreach ($this->rifcs->children() as $object) {
+				if ((string) $object->key == $id) {
+					$ctrb_obj = $object;
+					$ctrb_party = $object->party;
+					$new_ctrb = false;
+					break;
+				}
+			}
+			if ($new_ctrb) {
+				$ctrb_obj = $this->rifcs->addChild("registryObject");
+				$ctrb_obj->addAttribute("group", $output_nodes["registry_object"]["group"]);
+				$ctrb_obj->addChild("key", $id);
+				$ctrb_obj->addChild("originatingSource", $output_nodes["registry_object"]->originatingSource);
+				$ctrb_party = $ctrb_obj->addChild("party");
+				$ctrb_party->addAttribute("dateModified", date(DATE_W3C));
+				$ctrb_party->addAttribute("type", $partyArray["type"]);
+				$ctrb_name = $ctrb_party->addChild("name");
+				$ctrb_name->addAttribute("type", "primary");
+				foreach ($partyArray["name"] as $partType => $part) {
+					$ctrb_part = $ctrb_name->addChild("namePart", $part);
+					if ($partType != "whole") {
+						$ctrb_part->addAttribute("type", $partType);
+					}
+				}
+			}
+			$ctrb_rel_obj = $ctrb_party->addChild("relatedObject");
+			$ctrb_rel_obj->addChild("key", $output_nodes["key"]);
+			$ctrb_rel_obj_type = $ctrb_rel_obj->addChild("relation");
+			$ctrb_rel_obj_type->addAttribute("type", $relation["in"]);
+			$ctrb_party["dateModified"] = date(DATE_W3C);
+			$rel_obj = $output_nodes["collection"]->addChild("relatedObject");
+			$rel_obj->addChild("key", $id);
+			$rel_obj_type = $rel_obj->addChild("relation");
+			$rel_obj_type->addAttribute("type", $relation["out"]);
+		}
 	}
 
 	private function process_typeOfResource($input_node, $output_nodes) {
@@ -247,6 +370,11 @@ class Mods3ToRifcs extends Crosswalk {
 							}
 						}
 					}
+				}
+				break;
+			case "publisher":
+				if (empty($output_nodes["citation_metadata"]->publisher)) {
+					$output_nodes["citation_metadata"]->addChild("publisher", $node);
 				}
 				break;
 			case "dateIssued":
