@@ -472,7 +472,68 @@ class Mods3ToRifcs extends Crosswalk {
 	}
 
 	private function process_relatedItem($input_node, $output_nodes) {
-		
+		$relInfo = $output_nodes["collection"]->addChild("relatedInfo");
+		if (isset($input_node["type"])) {
+			$relType = $input_node["type"];
+			$relTypes = array(
+				"original" => "isDerivedFrom",
+				"host" => "isPartOf",
+				"constituent" => "hasPart",
+				"otherVersion" => "hasDerivedVersion",
+				"isReferencedBy" => "isReferencedBy"
+			);
+			$relation = $relInfo->addChild("relation");
+			if (isset($relTypes[$relType])) {
+				$relation->addAttribute("type", $relTypes[$relType]);
+			} else {
+				$relation->addAttribute("type", "hasAssociationWith");
+				preg_replace('~([a-z])([A-Z])~', '\1 \2', $relType);
+				$relType = ucfirst(strtolower($relType));
+				$relation->addChild("description", $relType);
+			}
+		}
+		foreach($input_node->children() as $node) {
+			switch ($node->getName()) {
+			case "identifier":
+				$rel_id = $relInfo->addChild("identifier", $node);
+				$rel_idType = "local";
+				if (isset($node["type"])) {
+					$rel_idType = $this->translateIdentifierType($node["type"]);
+				}
+				$rel_id->addAttribute("type", $rel_idType);
+				break;
+			case "titleInfo":
+				$title = "";
+				$subtitle = null;
+				foreach($node->children() as $subnode) {
+					switch ($subnode->getName()) {
+					case "title":
+						$title = (string) $subnode;
+						break;
+					case "subTitle":
+						$subtitle = (string) $subnode;
+						break;
+					}
+				}
+				if ($subtitle) {
+					$title += ": $subtitle";
+				}
+				$relInfo->addChild("title", $title);
+				if ($relType == "Series") {
+					$output_nodes["citation_metadata"]->addChild("context", $title);
+				}
+				break;
+			case "physicalDescription":
+				foreach($subnode->children() as $subsubnode) {
+					if ($subsubnode->getName() == "internetMediaType") {
+						$format = $relInfo->addChild("format");
+						$fmt_id = $format->addChild("identifier", $subsubnode);
+						$fmt_id->addAttribute("type", "mediaType");
+					}
+				}
+				break;
+			}
+		}
 	}
 
 	private function process_identifier($input_node, $output_nodes) {
