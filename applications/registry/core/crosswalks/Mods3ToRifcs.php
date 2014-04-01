@@ -80,6 +80,9 @@ class Mods3ToRifcs extends Crosswalk {
 			foreach($idTypes as $idType) {
 				foreach($identifiers as $identifier) {
 					if ($identifier["type"] == $idType) {
+						if ($idType == "doi") {
+							$identifier = str_replace('http://dx.doi.org/', '', $identifier);
+						}
 						$id = $citation_metadata->addChild("identifier", $identifier);
 						$id->addAttribute("type", $idType);
 						break 2;
@@ -207,7 +210,7 @@ class Mods3ToRifcs extends Crosswalk {
 			}
 		}
 		if ($subtitle) {
-			$title += ": $subtitle";
+			$title .= ": $subtitle";
 		}
 		if (empty($input_node->type)) {
 			$name = $output_nodes["collection"]->addChild("name");
@@ -238,20 +241,21 @@ class Mods3ToRifcs extends Crosswalk {
 		foreach ($input_node->children() as $node) {
 			switch ($node->getName()) {
 			case "namePart":
+				$value = str_replace('~', ' ', (string) $node);
 				if (isset($node["type"])) {
-					$partyArray["name"][(string) $node["type"]] = (string) $node;
+					$partyArray["name"][(string) $node["type"]] = $value;
 				} elseif ($partyArray["type"] == "person") {
-					if (preg_match("/(.+), ?([^,]+)(?:, ?([^,]+))?/", (string) $node, $matches)) {
+					if (preg_match("/(.+), ?([^,]+)(?:, ?([^,]+))?/", $value, $matches)) {
 						$partyArray["name"]["family"] = $matches[1];
 						$partyArray["name"]["given"] = $matches[2];
 						if (isset($matches[3])) {
 							$partyArray["name"]["suffix"] = $matches[3];
 						}
 					} else {
-						$partyArray["name"]["whole"] = (string) $node;
+						$partyArray["name"]["whole"] = $value;
 					}
 				} else {
-					$partyArray["name"]["whole"] = (string) $node;
+					$partyArray["name"]["whole"] = $value;
 				}
 				break;
 			case "role":
@@ -274,13 +278,13 @@ class Mods3ToRifcs extends Crosswalk {
 				break;
 			}
 		}
-		$hashString = '';
+		$hashString = "";
 		if (isset($partyArray["name"]["whole"])) {
 			$hashString = $partyArray["name"]["whole"];
 		} elseif (isset($partyArray["name"]["given"]) && isset($partyArray["name"]["family"])) {
-			$hashString = $partyArray["name"]["given"] + " " + $partyArray["name"]["family"];
+			$hashString = "{$partyArray["name"]["given"]} {$partyArray["name"]["family"]}";
 			if (isset($partyArray["name"]["suffix"])) {
-				$hashString += " " + $partyArray["name"]["suffix"];
+				$hashString .= " {$partyArray["name"]["suffix"]}";
 			}
 		}
 		$isRelatedObject = FALSE;
@@ -314,6 +318,8 @@ class Mods3ToRifcs extends Crosswalk {
 			// Is this a new or existing party?
 			$ctrb_obj = null;
 			$ctrb_party = null;
+			$ctrb_name = null;
+			$ctrb_part = null;
 			$new_ctrb = true;
 			foreach ($this->rifcs->children() as $object) {
 				if ((string) $object->key == $id) {
@@ -448,7 +454,7 @@ class Mods3ToRifcs extends Crosswalk {
 			if ($type != "modified") {
 				$this->addDate(
 					$output_nodes["collection"],
-					"dc." + $type,
+					"dc.$type",
 					$originDate["dateFrom"],
 					$originDate["dateTo"]
 				);
@@ -620,7 +626,7 @@ class Mods3ToRifcs extends Crosswalk {
 					}
 				}
 				if ($subtitle) {
-					$title += ": $subtitle";
+					$title .= ": $subtitle";
 				}
 				$relInfo->addChild("title", $title);
 				if ($relType == "Series") {
@@ -641,11 +647,15 @@ class Mods3ToRifcs extends Crosswalk {
 	}
 
 	private function process_identifier($input_node, $output_nodes) {
-		$id = $output_nodes["collection"]->addChild("identifier", $input_node);
 		$idType = "local";
 		if (isset($input_node["type"])) {
 			$idType = $this->translateIdentifierType((string) $input_node["type"]);
 		}
+		$identifier = (string) $input_node;
+		if ($idType == "doi") {
+			$identifier = str_replace('http://dx.doi.org/', '', $identifier);
+		}
+		$id = $output_nodes["collection"]->addChild("identifier", $identifier);
 		$id->addAttribute("type", $idType);
 	}
 
