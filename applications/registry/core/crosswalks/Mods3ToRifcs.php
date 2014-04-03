@@ -102,7 +102,7 @@ class Mods3ToRifcs extends Crosswalk {
 	private function parseDateString($string) {
 		$dateFrom = null;
 		$dateTo = null;
-		if (preg_match('~\d{4}-\d{4}~', $string, $matches)) {
+		if (preg_match('~(\d{4})-(\d{4})~', $string, $matches)) {
 			$dateFrom = $matches[1];
 			$dateTo = $matches[2];
 		} elseif (preg_match('~(\d{4}(?:-\d{2}(?:-\d{2})?)?)/(\d{4}(?:-\d{2}(?:-\d{2})?)?)~', $string, $matches)) {
@@ -135,7 +135,7 @@ class Mods3ToRifcs extends Crosswalk {
 		$rawCoords = $array;
 		$parsedCoords = array("type" => "text", "data" => "");
 		// Single element: one coordinate or a whole set?
-		if (count($array) == 1 && !preg_match("~(-\d\.)+ (-\d\.)+~")) {
+		if (count($array) == 1 && !preg_match("~(-\d\.)+ (-\d\.)+~", $array[0])) {
 			// Probably a whole set. Assume they are space delimited.
 			$rawCoords = explode(" ", $array[0]);
 		}
@@ -382,11 +382,13 @@ class Mods3ToRifcs extends Crosswalk {
 			case "dateIssued":
 				if (empty($node["point"])) {
 					$parsedDate = $this->parseDateString((string) $node);
-					$originDate = array(
-						"dateFrom" => $parsedDate["dateFrom"],
-						"dateTo" => $parsedDate["dateTo"]
-					);
-					$originDates["issued"] = $originDate;
+					if ($parsedDate["dateFrom"]) {
+						$originDate = array(
+							"dateFrom" => $parsedDate["dateFrom"],
+							"dateTo" => $parsedDate["dateTo"]
+						);
+						$originDates["issued"] = $originDate;
+					}
 				} else {
 					if ($node["point"] == "start") {
 						$originDates["issued"]["dateFrom"] = (string) $node;
@@ -398,11 +400,13 @@ class Mods3ToRifcs extends Crosswalk {
 			case "dateCreated":
 				if (empty($node["point"])) {
 					$parsedDate = $this->parseDateString((string) $node);
-					$originDate = array(
-						"dateFrom" => $parsedDate["dateFrom"],
-						"dateTo" => $parsedDate["dateTo"]
-					);
-					$originDates["created"] = $originDate;
+					if ($parsedDate["dateFrom"]) {
+						$originDate = array(
+							"dateFrom" => $parsedDate["dateFrom"],
+							"dateTo" => $parsedDate["dateTo"]
+						);
+						$originDates["created"] = $originDate;
+					}
 				} else {
 					if ($node["point"] == "start") {
 						$originDates["created"]["dateFrom"] = (string) $node;
@@ -414,11 +418,13 @@ class Mods3ToRifcs extends Crosswalk {
 			case "dateValid":
 				if (empty($node["point"])) {
 					$parsedDate = $this->parseDateString((string) $node);
-					$originDate = array(
-						"dateFrom" => $parsedDate["dateFrom"],
-						"dateTo" => $parsedDate["dateTo"]
-					);
-					$originDates["valid"] = $originDate;
+					if ($parsedDate["dateFrom"]) {
+						$originDate = array(
+							"dateFrom" => $parsedDate["dateFrom"],
+							"dateTo" => $parsedDate["dateTo"]
+						);
+						$originDates["valid"] = $originDate;
+					}
 				} else {
 					if ($node["point"] == "start") {
 						$originDates["valid"]["dateFrom"] = (string) $node;
@@ -430,11 +436,13 @@ class Mods3ToRifcs extends Crosswalk {
 			case "dateModified":
 				if (empty($node["point"])) {
 					$parsedDate = $this->parseDateString((string) $node);
-					$originDate = array(
-						"dateFrom" => $parsedDate["dateFrom"],
-						"dateTo" => $parsedDate["dateTo"]
-					);
-					$originDates["modified"] = $originDate;
+					if ($parsedDate["dateFrom"]) {
+						$originDate = array(
+							"dateFrom" => $parsedDate["dateFrom"],
+							"dateTo" => $parsedDate["dateTo"]
+						);
+						$originDates["modified"] = $originDate;
+					}
 				} else {
 					if ($node["point"] == "start") {
 						$originDates["modified"]["dateFrom"] = (string) $node;
@@ -583,6 +591,7 @@ class Mods3ToRifcs extends Crosswalk {
 
 	private function process_relatedItem($input_node, $output_nodes) {
 		$relInfo = $output_nodes["collection"]->addChild("relatedInfo");
+		$bad_node = TRUE;
 		if (isset($input_node["type"])) {
 			$relType = (string) $input_node["type"];
 			$relTypes = array(
@@ -611,6 +620,7 @@ class Mods3ToRifcs extends Crosswalk {
 					$rel_idType = $this->translateIdentifierType((string) $node["type"]);
 				}
 				$rel_id->addAttribute("type", $rel_idType);
+				$bad_node = FALSE;
 				break;
 			case "titleInfo":
 				$title = "";
@@ -629,6 +639,7 @@ class Mods3ToRifcs extends Crosswalk {
 					$title .= ": $subtitle";
 				}
 				$relInfo->addChild("title", $title);
+				$bad_node = FALSE;
 				if ($relType == "Series") {
 					$output_nodes["citation_metadata"]->addChild("context", $title);
 				}
@@ -639,10 +650,14 @@ class Mods3ToRifcs extends Crosswalk {
 						$format = $relInfo->addChild("format");
 						$fmt_id = $format->addChild("identifier", $subnode);
 						$fmt_id->addAttribute("type", "mediaType");
+						$bad_node = FALSE;
 					}
 				}
 				break;
 			}
+		}
+		if ($bad_node) {
+			unset($relInfo[0]);
 		}
 	}
 
@@ -697,7 +712,7 @@ class Mods3ToRifcs extends Crosswalk {
 			$rights->addChild("rightsStatement", $input_node);
 		}
 		// Here we recognise CC licences if they occur by URL in a licence statement.
-		if (preg_match('~(http://creativecommons.org/licenses/([^/]+)(?!@)?)~', (string) $input_node, $matches)) {
+		if (preg_match('~(http://creativecommons.org/licenses/([^/]+)(?:[^\b]*)?)~', (string) $input_node, $matches)) {
 			$licence = $rights->addChild("licence");
 			$licence->addAttribute("rightsUri", $matches[1]);
 			$licence->addAttribute("type", strtoupper($matches[2]));
