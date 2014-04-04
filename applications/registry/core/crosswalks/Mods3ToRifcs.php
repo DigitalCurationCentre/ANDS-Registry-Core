@@ -268,6 +268,7 @@ class Mods3ToRifcs extends Crosswalk {
 							$partyArray["role"] = "author";
 							break;
 						case "Publisher":
+						case "publisher":
 						case "pbl":
 							$partyArray["role"] = "publisher";
 							break;
