@@ -10,6 +10,7 @@ class CrosswalkHelper {
 		"http://researchdata.gla.ac.uk/cgi/oai2" => "University of Glasgow",
 		"http://eprints.lincoln.ac.uk/cgi/oai2" => "University of Lincoln",
 		"http://oai.datacite.org/oai" => "DataCite Consortium",
+		"https://risweb.st-andrews.ac.uk:443/ws/oai" => "University of St Andrews"
 	);
 	
 	const RIFCS_WRAPPER="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n
@@ -24,7 +25,7 @@ class CrosswalkHelper {
 	}
 	
 	public static function escapeAmpersands($string){
-		return str_replace("&", "&amp;", $string);
+		return addslashes(str_replace("&", "&amp;", $string));
 	}
 	
 	public static function isUrl($string){
