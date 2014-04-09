@@ -9,6 +9,7 @@ class CrosswalkHelper {
 		"http://databank.ora.ox.ac.uk/oaipmh" => "University of Oxford",
 		"http://researchdata.gla.ac.uk/cgi/oai2" => "University of Glasgow",
 		"http://eprints.lincoln.ac.uk/cgi/oai2" => "University of Lincoln",
+		"http://oai.datacite.org/oai" => "DataCite Consortium",
 	);
 	
 	const RIFCS_WRAPPER="<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n
