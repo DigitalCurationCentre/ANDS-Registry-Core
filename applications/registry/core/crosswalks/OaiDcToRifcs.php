@@ -4,20 +4,20 @@ class OaiDcToRifcs extends Crosswalk {
 
 	private $oaipmh = null;
 	private $rifcs = null;
-	
+
 	function __construct(){
 		require_once(REGISTRY_APP_PATH . "core/crosswalks/_crosswalk_helper.php");
 		$this->rifcs = simplexml_load_string(CrosswalkHelper::RIFCS_WRAPPER);
 	}
-	
+
 	public function identify(){
 		return "OAI-PMH Dublin Core to RIF-CS (Experimental)";
 	}
-	
+
 	public function metadataFormat(){
 		return "oai_dc";
 	}
-	
+
 	public function validate($payload){
 		$this->load_payload($payload);
 		if (!$this->oaipmh){
@@ -34,7 +34,7 @@ class OaiDcToRifcs extends Crosswalk {
 		}
 		return true;
 	}
-	
+
 	public function payloadToRIFCS($payload){
 		$this->load_payload($payload);
 		foreach ($this->oaipmh->ListRecords->children() as $record){
@@ -95,13 +95,13 @@ class OaiDcToRifcs extends Crosswalk {
 		}
 		return $this->rifcs->asXML();
 	}
-	
+
 	private function load_payload($payload){
 		if ($this->oaipmh == null) {
 			$this->oaipmh = simplexml_load_string($payload);
 		}
 	}
-	
+
 	private function addDate($node, $type, $valueFrom, $valueTo = FALSE) {
 		if ($node->getName() == "coverage") {
 			$dates = $node->addChild("temporal");
@@ -118,7 +118,7 @@ class OaiDcToRifcs extends Crosswalk {
 			$dates_dateTo->addAttribute("dateFormat", "W3CDTF");
 		}
 	}
-	
+
 	private function addLocationUrl($collection, $url) {
 		$loc = $collection->addChild("location");
 		$addr = $loc->addChild("address");
@@ -126,7 +126,7 @@ class OaiDcToRifcs extends Crosswalk {
 		$elec->addAttribute("type", "url");
 		$elec->addChild("value", $url);
 	}
-	
+
 	private function parseNames($authorString) {
 		$authors = array();
 		$names = array();
@@ -157,7 +157,7 @@ class OaiDcToRifcs extends Crosswalk {
 		}
 		return $names;
 	}
-	
+
 	private function process_title($input_node, $output_nodes) {
 		$title = (string) $input_node;
 		$name = $output_nodes["collection"]->addChild("name");
@@ -165,7 +165,7 @@ class OaiDcToRifcs extends Crosswalk {
 		$name->addChild("namePart", $title);
 		$output_nodes["citation_metadata"]->addChild("title", $title);
 	}
-	
+
 	private function process_creator($input_node, $output_nodes) {
 		$names = $this->parseNames((string) $input_node);
 		foreach ($names as $author_name) {
@@ -228,7 +228,7 @@ class OaiDcToRifcs extends Crosswalk {
 			$rel_obj_type->addAttribute("type", "hasPrincipalInvestigator");
 		}
 	}
-	
+
 	private function process_subject($input_node, $output_nodes) {
 		$subject = (string) $input_node;
 		$subjects = array();
@@ -251,20 +251,20 @@ class OaiDcToRifcs extends Crosswalk {
 			$keyword->addAttribute("type", "local");
 		}
 	}
-	
+
 	private function process_description($input_node, $output_nodes) {
 		$description = $output_nodes["collection"]->addChild("description", (string) $input_node);
 		$description->addAttribute("type", "full");
 	}
-	
+
 	private function process_publisher($input_node, $output_nodes) {
-		$output_nodes["citation_metadata"]->addChild("publisher", (string) $input_node);
+		$output_nodes["citation_metadata"]->addChild("publisher", CrosswalkHelper::escapeAmpersands($input_node));
 	}
-	
+
 	private function process_contributor($input_node, $output_nodes) {
 		$output_nodes["contributors"] = $this->parseNames((string) $input_node);
 	}
-	
+
 	private function process_date($input_node, $output_nodes) {
 		$dateString = (string) $input_node;
 		if ($divider = strpos($dateString, '/')) {
@@ -285,7 +285,7 @@ class OaiDcToRifcs extends Crosswalk {
 		$cite_issued = $output_nodes["citation_metadata"]->addChild("date", $dateString);
 		$cite_issued->addAttribute("type", "issued");
 	}
-	
+
 	private function process_identifier($input_node, $output_nodes) {
 		$id = (string) $input_node;
 		$idType = "local";
@@ -320,14 +320,14 @@ class OaiDcToRifcs extends Crosswalk {
 		} elseif (CrosswalkHelper::isUri($id)) {
 			$idType = "uri";
 		}
-		$identifier = $output_nodes["collection"]->addChild("identifier", $id);
+		$identifier = $output_nodes["collection"]->addChild("identifier", CrosswalkHelper::escapeAmpersands($id));
 		$identifier->addAttribute("type", $idType);
 		if ($output_nodes["citation_metadata"]->identifier === null) {
 			$cite_identifier = $output_nodes["citation_metadata"]->addChild("identifier", $id);
 			$cite_identifier->addAttribute("type", $idType);
 		}
 	}
-	
+
 	private function process_source($input_node, $output_nodes) {
 		$id = (string) $input_node;
 		$parsed_id = $id;
@@ -343,10 +343,12 @@ class OaiDcToRifcs extends Crosswalk {
 					$source = $object;
 					break;
 				} else {
-					foreach ($object->collection->identifier as $identifier) {
-						if ($parsed_id == (string) $identifier) {
-							$source = $object;
-							break 2;
+					if ($object->collection->identifier != null) {
+						foreach ($object->collection->identifier as $identifier) {
+							if ($parsed_id == (string) $identifier) {
+								$source = $object;
+								break 2;
+							}
 						}
 					}
 				}
@@ -363,7 +365,7 @@ class OaiDcToRifcs extends Crosswalk {
 			$source_relation->addChild("type", "hasDerivedCollection");
 		}
 	}
-	
+
 	private function process_relation($input_node, $output_nodes) {
 		$id = (string) $input_node;
 		$idType = "local";
@@ -389,7 +391,7 @@ class OaiDcToRifcs extends Crosswalk {
 		$relation->addAttribute("type", "hasAssociationWith");
 		$relation->addChild("description", "Unknown");
 	}
-	
+
 	private function process_coverage($input_node, $output_nodes) {
 		$coverage = (string) $input_node;
 		// Is this a date or date range?
@@ -420,7 +422,7 @@ class OaiDcToRifcs extends Crosswalk {
 			$spatial->addAttribute("type", "text");
 		}
 	}
-	
+
 	private function process_rights($input_node, $output_nodes) {
 		$output_nodes["rights"]->addChild("rightsStatement", (string) $input_node);
 	}
