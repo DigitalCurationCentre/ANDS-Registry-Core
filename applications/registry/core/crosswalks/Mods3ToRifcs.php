@@ -4,20 +4,20 @@ class Mods3ToRifcs extends Crosswalk {
 
 	private $oaipmh = null;
 	private $rifcs = null;
-	
+
 	function __construct(){
 		require_once(REGISTRY_APP_PATH . "core/crosswalks/_crosswalk_helper.php");
 		$this->rifcs = simplexml_load_string(CrosswalkHelper::RIFCS_WRAPPER);
 	}
-	
+
 	public function identify(){
 		return "MODS 3.5 to RIF-CS (Experimental)";
 	}
-	
+
 	public function metadataFormat(){
 		return "mods";
 	}
-	
+
 	public function validate($payload){
 		$this->load_payload($payload);
 		if (!$this->oaipmh){
@@ -34,7 +34,7 @@ class Mods3ToRifcs extends Crosswalk {
 		}
 		return true;
 	}
-	
+
 	public function payloadToRIFCS($payload){
 		$this->load_payload($payload);
 		foreach ($this->oaipmh->ListRecords->children() as $record){
@@ -57,22 +57,24 @@ class Mods3ToRifcs extends Crosswalk {
 			$coverage = $coll->addChild("coverage");
 			$rights = $coll->addChild("rights");
 			$contributors = array();
-			foreach ($record->metadata->mods->children() as $node) {
-				$func = "process_".$node->getName();
-				if (is_callable(array($this, $func))){
-					call_user_func(
-						array($this, $func),
-						$node,
-						array(
-							"registry_object" => $reg_obj,
-							"key" => $key,
-							"collection" => $coll,
-							"citation_metadata" => $citation_metadata,
-							"coverage" => $coverage,
-							"rights" => $rights,
-							"contributors" => &$contributors
-						)
-					);
+			foreach ($record->metadata->children("http://www.loc.gov/mods/v3") as $mods) {
+				foreach ($mods->children("http://www.loc.gov/mods/v3") as $node) {
+					$func = "process_".$node->getName();
+					if (is_callable(array($this, $func))){
+						call_user_func(
+							array($this, $func),
+							$node,
+							array(
+								"registry_object" => $reg_obj,
+								"key" => $key,
+								"collection" => $coll,
+								"citation_metadata" => $citation_metadata,
+								"coverage" => $coverage,
+								"rights" => $rights,
+								"contributors" => &$contributors
+							)
+						);
+					}
 				}
 			}
 			$idTypes = array("doi", "handle", "uri", "isbn", "issn", "istc", "upc", "local");
@@ -92,13 +94,13 @@ class Mods3ToRifcs extends Crosswalk {
 		}
 		return $this->rifcs->asXML();
 	}
-	
+
 	private function load_payload($payload){
 		if ($this->oaipmh == null) {
 			$this->oaipmh = simplexml_load_string($payload);
 		}
 	}
-	
+
 	private function parseDateString($string) {
 		$dateFrom = null;
 		$dateTo = null;
@@ -113,7 +115,7 @@ class Mods3ToRifcs extends Crosswalk {
 		}
 		return array("dateFrom" => $dateFrom, "dateTo" => $dateTo);
 	}
-	
+
 	private function addDate($node, $type, $valueFrom, $valueTo = FALSE) {
 		if ($node->getName() == "coverage") {
 			$dates = $node->addChild("temporal");
@@ -130,7 +132,7 @@ class Mods3ToRifcs extends Crosswalk {
 			$dates_dateTo->addAttribute("dateFormat", "W3CDTF");
 		}
 	}
-	
+
 	private function parseCoordinates($array) {
 		$rawCoords = $array;
 		$parsedCoords = array("type" => "text", "data" => "");
@@ -159,7 +161,7 @@ class Mods3ToRifcs extends Crosswalk {
 		}
 		return $parsedCoords;
 	}
-	
+
 	private function translateIdentifierType($string){
 		$idType = "local";
 		$knownTypes = array(
@@ -194,12 +196,12 @@ class Mods3ToRifcs extends Crosswalk {
 		}
 		return $idType;
 	}
-	
+
 	private function process_titleInfo($input_node, $output_nodes) {
 		// There should be just one title and at most one subtitle per info block
 		$title = null;
 		$subtitle = null;
-		foreach ($input_node->children() as $node) {
+		foreach ($input_node->children("http://www.loc.gov/mods/v3") as $node) {
 			switch ($node->getName()) {
 			case "title":
 				$title = (string) $node;
@@ -238,13 +240,13 @@ class Mods3ToRifcs extends Crosswalk {
 			}
 		}
 		$partyArray["name"] = array();
-		foreach ($input_node->children() as $node) {
+		foreach ($input_node->children("http://www.loc.gov/mods/v3") as $node) {
 			switch ($node->getName()) {
 			case "namePart":
 				$value = str_replace('~', ' ', (string) $node);
 				if (isset($node["type"])) {
 					$partyArray["name"][(string) $node["type"]] = $value;
-				} elseif ($partyArray["type"] == "person") {
+				} elseif (isset($partyArray["type"]) && $partyArray["type"] == "person") {
 					if (preg_match("/(.+), ?([^,]+)(?:, ?([^,]+))?/", $value, $matches)) {
 						$partyArray["name"]["family"] = $matches[1];
 						$partyArray["name"]["given"] = $matches[2];
@@ -259,7 +261,7 @@ class Mods3ToRifcs extends Crosswalk {
 				}
 				break;
 			case "role":
-				foreach($node->children() as $subnode) {
+				foreach($node->children("http://www.loc.gov/mods/v3") as $subnode) {
 					if ($subnode->getName() == "roleTerm") {
 						switch ((string) $subnode) {
 						case "Author":
@@ -362,11 +364,11 @@ class Mods3ToRifcs extends Crosswalk {
 	private function process_originInfo($input_node, $output_nodes) {
 		// Dates collected first and used later
 		$originDates = array();
-		foreach($input_node->children() as $node) {
+		foreach($input_node->children("http://www.loc.gov/mods/v3") as $node) {
 			switch ($node->getName()) {
 			case "place":
 				if (empty($input_node->eventType) || $input_node->eventType == "publication") {
-					foreach($node->children() as $subnode) {
+					foreach($node->children("http://www.loc.gov/mods/v3") as $subnode) {
 						if ($subnode->getName() == "placeTerm") {
 							if (empty($subnode->type) || $subnode->type == "text") {
 								$output_nodes["citation_metadata"]->addChild("placePublished", $subnode);
@@ -481,7 +483,7 @@ class Mods3ToRifcs extends Crosswalk {
 					$date->addAttribute("type", "publicationDate");
 				}
 			}
-			
+
 		}
 	}
 
@@ -533,7 +535,7 @@ class Mods3ToRifcs extends Crosswalk {
 		// For coordinates
 		$coords = array();
 		// Now we can begin
-		foreach ($input_node->children() as $node) {
+		foreach ($input_node->children("http://www.loc.gov/mods/v3") as $node) {
 			switch ($node->getName()) {
 			case "topic":
 				$subject = $output_nodes["collection"]->addChild("subject", $node);
@@ -562,7 +564,7 @@ class Mods3ToRifcs extends Crosswalk {
 				}
 				break;
 			case "cartographics":
-				foreach ($node->children() as $subnode) {
+				foreach ($node->children("http://www.loc.gov/mods/v3") as $subnode) {
 					if ($subnode->getName() == "coordinates") {
 						$coords[] = (string) $subnode;
 					}
@@ -612,7 +614,7 @@ class Mods3ToRifcs extends Crosswalk {
 				$relation->addChild("description", $relType);
 			}
 		}
-		foreach($input_node->children() as $node) {
+		foreach($input_node->children("http://www.loc.gov/mods/v3") as $node) {
 			switch ($node->getName()) {
 			case "identifier":
 				$rel_id = $relInfo->addChild("identifier", $node);
@@ -626,7 +628,7 @@ class Mods3ToRifcs extends Crosswalk {
 			case "titleInfo":
 				$title = "";
 				$subtitle = null;
-				foreach($node->children() as $subnode) {
+				foreach($node->children("http://www.loc.gov/mods/v3") as $subnode) {
 					switch ($subnode->getName()) {
 					case "title":
 						$title = (string) $subnode;
@@ -646,7 +648,7 @@ class Mods3ToRifcs extends Crosswalk {
 				}
 				break;
 			case "physicalDescription":
-				foreach($node->children() as $subnode) {
+				foreach($node->children("http://www.loc.gov/mods/v3") as $subnode) {
 					if ($subnode->getName() == "internetMediaType") {
 						$format = $relInfo->addChild("format");
 						$fmt_id = $format->addChild("identifier", $subnode);
@@ -671,13 +673,13 @@ class Mods3ToRifcs extends Crosswalk {
 		if ($idType == "doi") {
 			$identifier = str_replace('http://dx.doi.org/', '', $identifier);
 		}
-		$id = $output_nodes["collection"]->addChild("identifier", $identifier);
+		$id = $output_nodes["collection"]->addChild("identifier", CrosswalkHelper::escapeAmpersands($identifier));
 		$id->addAttribute("type", $idType);
 	}
 
 	private function process_location($input_node, $output_nodes) {
 		$locationUrls = array();
-		foreach ($input_node->children() as $node) {
+		foreach ($input_node->children("http://www.loc.gov/mods/v3") as $node) {
 			if ($node->getName() == "url") {
 				if (empty($node->usage)) {
 					$locationUrls["unknown"] = (string) $node;
