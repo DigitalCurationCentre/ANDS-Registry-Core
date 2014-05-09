@@ -11,7 +11,7 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	public function identify(){
-		return "DataCite (up to version 3) to RIF-CS (Experimental)";
+		return "DataCite (up to version 3) to RIF-CS via OAI-PMH (Experimental)";
 	}
 	
 	public function metadataFormat(){
@@ -107,6 +107,7 @@ class DataCite3ToRifcs extends Crosswalk {
 			"ISTC" => "istc",
 			"LISSN" => "lissn",
 			"LSID" => "urn",
+			"ORCID" => "orcid",
 			"PURL" => "purl",
 			"UPC" => "upc",
 			"URL" => "uri",
@@ -169,6 +170,80 @@ class DataCite3ToRifcs extends Crosswalk {
 		return $scheme;
 	}
 	
+	private function addName($partyArray, $output_nodes) {
+		$relation = array();
+		switch($partyArray["role"]) {
+		case "contributor":
+			$ctrb = $output_nodes["citation_metadata"]->addChild("contributor");
+			foreach($partyArray["name"] as $type => $part) {
+				$namePart = $ctrb->addChild("namePart", $part);
+				if ($type != "whole") {
+					$namePart->addAttribute("type", $type);
+				}
+			}
+		case "investigator"://this also applies to 'contributors'
+			$relation["out"] = "hasPrincipalInvestigator";
+			$relation["in"] = "isPrincipalInvestigatorOf";
+			break;
+		}
+		$id = null;
+		if (isset($partyArray["identifier"])) {
+			$id = $partyArray["identifier"];
+		} else {
+			$hashString = "";
+			if (isset($partyArray["name"]["whole"])) {
+				$hashString = $partyArray["name"]["whole"];
+			} elseif (isset($partyArray["name"]["given"]) && isset($partyArray["name"]["family"])) {
+				$hashString = "{$partyArray["name"]["given"]} {$partyArray["name"]["family"]}";
+			}
+			$id = sha1($hashString);
+		}
+		// Is this a new or existing party?
+		$ctrb_obj = null;
+		$ctrb_party = null;
+		$ctrb_name = null;
+		$ctrb_part = null;
+		$new_ctrb = true;
+		foreach ($this->rifcs->children() as $object) {
+			if ((string) $object->key == $id) {
+				$ctrb_obj = $object;
+				$ctrb_party = $object->party;
+				$new_ctrb = false;
+				break;
+			}
+		}
+		if ($new_ctrb) {
+			$ctrb_obj = $this->rifcs->addChild("registryObject");
+			$ctrb_obj->addAttribute("group", $output_nodes["registry_object"]["group"]);
+			$ctrb_obj->addChild("key", $id);
+			$ctrb_obj->addChild("originatingSource", $output_nodes["registry_object"]->originatingSource);
+			$ctrb_party = $ctrb_obj->addChild("party");
+			$ctrb_party->addAttribute("dateModified", date(DATE_W3C));
+			$ctrb_party->addAttribute("type", $partyArray["type"]);
+			if (isset($partyArray["identifier_scheme"])) {
+				$ctrb_id = $ctrb_party->addChild("identifier", $id);
+				$ctrb_id->addAttribute("type", $this->translateIdentifierType($partyArray["identifier_scheme"]));
+			}
+			$ctrb_name = $ctrb_party->addChild("name");
+			$ctrb_name->addAttribute("type", "primary");
+			foreach ($partyArray["name"] as $partType => $part) {
+				$ctrb_part = $ctrb_name->addChild("namePart", $part);
+				if ($partType != "whole") {
+					$ctrb_part->addAttribute("type", $partType);
+				}
+			}
+		}
+		$ctrb_rel_obj = $ctrb_party->addChild("relatedObject");
+		$ctrb_rel_obj->addChild("key", $output_nodes["key"]);
+		$ctrb_rel_obj_type = $ctrb_rel_obj->addChild("relation");
+		$ctrb_rel_obj_type->addAttribute("type", $relation["in"]);
+		$ctrb_party["dateModified"] = date(DATE_W3C);
+		$rel_obj = $output_nodes["collection"]->addChild("relatedObject");
+		$rel_obj->addChild("key", $id);
+		$rel_obj_type = $rel_obj->addChild("relation");
+		$rel_obj_type->addAttribute("type", $relation["out"]);
+	}
+	
 	private function process_identifier($input_node, $output_nodes) {
 		$id = $output_nodes["collection"]->addChild("identifier", (string) $input_node);
 		$idType = $this->translateIdentifierType((string) $input_node["identifierType"]);
@@ -189,7 +264,31 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_creators($input_node, $output_nodes) {
-		
+		foreach ($input_node->children() as $creator) {
+			$partyArray = array();
+			$partyArray["name"] = array();
+			foreach ($creator->children() as $child) {
+				switch ($child->getName()) {
+				case "creatorName":
+					$name = CrosswalkHelper::escapeAmpersands($child);
+					if (preg_match('/([-\w]+), ?([-\w\s])/', $name, $matches)) {
+						$partyArray["type"] = "person";
+						$partyArray["name"]["family"] = $matches[1];
+						$partyArray["name"]["given"] = $matches[2];
+					} else {
+						$partyArray["type"] = "group";
+						$partyArray["name"]["whole"] = $name;
+					}
+					break;
+				case "nameIdentifier":
+					$partyArray["identifier"] = CrosswalkHelper::escapeAmpersands($child);
+					$partyArray["identifier_scheme"] = $child["nameIdentifierScheme"];
+					break;
+				}
+			}
+			$partyArray["role"] = "contributor";
+			$this->addName($partyArray, $output_nodes);
+		}
 	}
 	
 	private function process_titles($input_node, $output_nodes) {
@@ -233,7 +332,40 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_contributors($input_node, $output_nodes) {
-		
+		foreach ($input_node->children() as $contributor) {
+			$partyArray = array();
+			$partyArray["name"] = array();
+			foreach ($contributor->children() as $child) {
+				switch ($child->getName()) {
+				case "contributorName":
+					$name = CrosswalkHelper::escapeAmpersands($child);
+					if (preg_match('/([-\w]+), ?([-\w\s])/', $name, $matches)) {
+						$partyArray["type"] = "person";
+						$partyArray["name"]["family"] = $matches[1];
+						$partyArray["name"]["given"] = $matches[2];
+					} else {
+						$partyArray["type"] = "group";
+						$partyArray["name"]["whole"] = $name;
+					}
+					break;
+				case "nameIdentifier":
+					$partyArray["identifier"] = CrosswalkHelper::escapeAmpersands($child);
+					$partyArray["identifier_scheme"] = $child["nameIdentifierScheme"];
+					break;
+				case "contributorType":
+					switch (CrosswalkHelper::escapeAmpersands($child)) {
+					case "DataCollector":
+					case "ProjectLeader":
+					case "WorkPackageLeader":
+						$partyArray["role"] = "investigator";
+						break;
+					}
+				}
+			}
+			if (isset($partyArray["role"])) {
+				$this->addName($partyArray, $output_nodes);
+			}
+		}
 	}
 	
 	private function process_dates($input_node, $output_nodes) {
