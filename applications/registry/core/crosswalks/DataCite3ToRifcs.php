@@ -4,6 +4,17 @@ class DataCite3ToRifcs extends Crosswalk {
 
 	private $oaipmh = null;
 	private $rifcs = null;
+	private $relation_types = array(
+		"IsCitedBy" => array("publication", "isCitedBy"),
+		"IsSupplementedBy" => array("publication", "isSupplementedBy"),
+		"IsSupplementTo" => array("publication", "isSupplementTo"),
+		"IsPartOf" => array("collection", "isPartOf"),
+		"HasPart" => array("collection", "hasPart"),
+		"IsReferencedBy" => array("publication", "isReferencedBy"),
+		"IsDocumentedBy" => array("publication", "isDocumentedBy"),
+		"IsCompiledBy" => array("collection", "isDerivedFrom"),
+		"Compiles" => array("collection", "hasDerivedCollection"),
+	);
 	
 	function __construct(){
 		require_once(REGISTRY_APP_PATH . "core/crosswalks/_crosswalk_helper.php");
@@ -310,7 +321,7 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_publisher($input_node, $output_nodes) {
-		
+		$output_nodes["citation_metadata"]->addChild("publisher", CrosswalkHelper::escapeAmpersands($publisher));
 	}
 	
 	private function process_publicationYear($input_node, $output_nodes) {
@@ -426,7 +437,30 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_relatedIdentifiers($input_node, $output_nodes) {
-		
+		foreach($input_node->children() as $relatedIdentifier) {
+			$relatedInfo = $output_nodes["collection"]->addChild("relatedInfo");
+			$identifier = $relatedInfo->addChild("identifier", CrosswalkHelper::escapeAmpersands($relatedIdentifier));
+			$identifier->addAttribute("type", $this->translateIdentifierType((string)$relatedIdentifier["relatedIdentifierType"]));
+			$relation = $relatedInfo->addChild("relation");
+			if (isset($this->relation_types[(string)$relatedIdentifier["relationType"]])) {
+				$relation->addAttribute("type", $this->relation_types[(string)$relatedIdentifier["relationType"]][1]);
+				$relatedInfo->addAttribute("type", $this->relation_types[(string)$relatedIdentifier["relationType"]][0]);
+			}
+			else {
+				$relation->addAttribute("type", "hasAssociationWith");
+				$relation->addChild("description", CrosswalkHelper::escapeAmpersands(preg_replace('/(?!^)[A-Z]{2,}(?=[A-Z][a-z])|[A-Z][a-z]/', ' $0', $relatedIdentifier["relationType"])));
+				if ($relatedIdentifier["relationType"] == "Cites" || $relatedIdentifier["relationType"] == "References") {
+					$relatedInfo->addAttribute("type", "publication");
+				}
+				else {
+					$relatedInfo->addAttribute("type", "collection");
+				}
+			}
+			if (isset($relatedIdentifier["schemeURI"])) {
+				$format = $relatedInfo->addChild("format");
+				$format->addChild("identifier", $relatedIdentifier["schemeURI"])->addAttribute("type", "uri");
+			}
+		}
 	}
 	
 	private function process_sizes($input_node, $output_nodes) {
