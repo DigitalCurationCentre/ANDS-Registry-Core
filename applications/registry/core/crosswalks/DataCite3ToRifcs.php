@@ -421,14 +421,6 @@ class DataCite3ToRifcs extends Crosswalk {
 		}
 	}
 	
-	private function process_language($input_node, $output_nodes) {
-		
-	}
-	
-	private function process_resourceType($input_node, $output_nodes) {
-		
-	}
-	
 	private function process_alternateIdentifiers($input_node, $output_nodes) {
 		foreach ($input_node->children() as $node) {
 			$idType = $this->translateIdentifierType((string) $node["alternateIdentifierType"]);
@@ -462,14 +454,6 @@ class DataCite3ToRifcs extends Crosswalk {
 				$format->addChild("identifier", $relatedIdentifier["schemeURI"])->addAttribute("type", "uri");
 			}
 		}
-	}
-	
-	private function process_sizes($input_node, $output_nodes) {
-		
-	}
-	
-	private function process_formats($input_node, $output_nodes) {
-		
 	}
 	
 	private function process_version($input_node, $output_nodes) {
