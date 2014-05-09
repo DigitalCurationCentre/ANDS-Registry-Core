@@ -44,7 +44,7 @@ class DataciteToRifcs extends Crosswalk {
 	}
 	
 	public function identify(){
-		return "DataCite to RIF-CS (Experimental)";
+		return "DataCite to RIF-CS: single record (Experimental)";
 	}
 	
 	public function metadataFormat(){
@@ -123,7 +123,7 @@ class DataciteToRifcs extends Crosswalk {
 			$party->addChild("name")->addChild("namePart", $name);
 			$rel_obj = $party->addChild("relatedObject");
 			$rel_obj->addChild("key", CrosswalkHelper::escapeAmpersands($this->doi));
-			$rel_obj->addChild("relation")->addAttribute("type","isCollectorOf");
+			$rel_obj->addChild("relation")->addAttribute("type","isPrincipalInvestigatorOf");
 		}
 	}
 	
