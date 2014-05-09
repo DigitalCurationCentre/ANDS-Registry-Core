@@ -256,11 +256,11 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_identifier($input_node, $output_nodes) {
-		$id = $output_nodes["collection"]->addChild("identifier", (string) $input_node);
-		$idType = $this->translateIdentifierType((string) $input_node["identifierType"]);
+		$id = $output_nodes["collection"]->addChild("identifier", CrosswalkHelper::escapeAmpersands($input_node));
+		$idType = $this->translateIdentifierType(CrosswalkHelper::escapeAmpersands($input_node["identifierType"]));
 		$id->addAttribute("type", $idType);
 		
-		$cite_id = $output_nodes["citation_metadata"]->addChild("identifier", (string) $input_node);
+		$cite_id = $output_nodes["citation_metadata"]->addChild("identifier", CrosswalkHelper::escapeAmpersands($input_node));
 		$cite_id->addAttribute("type", $idType);
 		
 		if ($idType == "doi") {
@@ -268,9 +268,9 @@ class DataCite3ToRifcs extends Crosswalk {
 			$address = $location->addChild("address");
 			$electronic = $address->addChild("electronic");
 			$electronic->addAttribute("url");
-			$electronic->addChild("value", "http://dx.doi.org/" . (string) $input_node);
+			$electronic->addChild("value", "http://dx.doi.org/" . CrosswalkHelper::escapeAmpersands($input_node));
 			
-			$output_nodes["citation_metadata"]->addChild("url", "http://dx.doi.org/" . (string) $input_node);
+			$output_nodes["citation_metadata"]->addChild("url", "http://dx.doi.org/" . CrosswalkHelper::escapeAmpersands($input_node));
 		}
 	}
 	
@@ -325,18 +325,18 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_publicationYear($input_node, $output_nodes) {
-		$published = $output_nodes["citation_metadata"]->addChild("date", (string) $input_node);
+		$published = $output_nodes["citation_metadata"]->addChild("date", CrosswalkHelper::escapeAmpersands($input_node));
 		$published->addAttribute("type", "publicationDate");
 	}
 	
 	private function process_subjects($input_node, $output_nodes) {
 		foreach ($input_node->children() as $subject) {
-			$term = $output_nodes["collection"]->addChild("subject", (string) $subject);
+			$term = $output_nodes["collection"]->addChild("subject", CrosswalkHelper::escapeAmpersands($subject));
 			$scheme = "local";
 			if (isset($subject["schemeURI"])) {
-				$scheme = $this->translateSchemeUri((string) $subject["schemeURI"]);
+				$scheme = $this->translateSchemeUri(CrosswalkHelper::escapeAmpersands($subject["schemeURI"]));
 			} elseif (isset($subject["subjectScheme"])) {
-				$scheme = $this->translateSchemeType((string) $subject["subjectScheme"]);
+				$scheme = $this->translateSchemeType(CrosswalkHelper::escapeAmpersands($subject["subjectScheme"]));
 			}
 			$term->addAttribute("type", $scheme);
 		}
@@ -391,19 +391,20 @@ class DataCite3ToRifcs extends Crosswalk {
 		);
 		foreach ($input_node->children() as $node) {
 			$dateTypeString = (string) $node["dateType"];
+			$dateString = CrosswalkHelper::escapeAmpersands($node);
 			$dateFrom = FALSE;
 			$dateTo = FALSE;
 			// Single date or range?
-			if ($divider = strpos((string) $node, '/')) {
-				$dateFromString = substr((string) $node, 0, $divider);
+			if ($divider = strpos($dateString, '/')) {
+				$dateFromString = substr($dateString, 0, $divider);
 				$dateFromStamp = strtotime($dateFromString);
-				$dateToString = substr((string) $node, $divider);
+				$dateToString = substr($dateString, $divider);
 				$dateToStamp = strtotime($dateToString);
 				if ($dateToStamp) {
 					$dateTo = date(DATE_W3C, $dateFromStamp);
 				}
 			} else {
-				$dateFromStamp = strtotime((string) $node);
+				$dateFromStamp = strtotime($dateString);
 			}
 			if ($dateFromStamp) {
 				$dateFrom = date(DATE_W3C, $dateFromStamp);
@@ -431,7 +432,7 @@ class DataCite3ToRifcs extends Crosswalk {
 	private function process_alternateIdentifiers($input_node, $output_nodes) {
 		foreach ($input_node->children() as $node) {
 			$idType = $this->translateIdentifierType((string) $node["alternateIdentifierType"]);
-			$id = $output_nodes["collection"]->addChild("identifier", (string) $node);
+			$id = $output_nodes["collection"]->addChild("identifier", CrosswalkHelper::escapeAmpersands($node));
 			$id->addAttribute("type", $idType);
 		}
 	}
@@ -440,11 +441,11 @@ class DataCite3ToRifcs extends Crosswalk {
 		foreach($input_node->children() as $relatedIdentifier) {
 			$relatedInfo = $output_nodes["collection"]->addChild("relatedInfo");
 			$identifier = $relatedInfo->addChild("identifier", CrosswalkHelper::escapeAmpersands($relatedIdentifier));
-			$identifier->addAttribute("type", $this->translateIdentifierType((string)$relatedIdentifier["relatedIdentifierType"]));
+			$identifier->addAttribute("type", $this->translateIdentifierType((string) $relatedIdentifier["relatedIdentifierType"]));
 			$relation = $relatedInfo->addChild("relation");
-			if (isset($this->relation_types[(string)$relatedIdentifier["relationType"]])) {
-				$relation->addAttribute("type", $this->relation_types[(string)$relatedIdentifier["relationType"]][1]);
-				$relatedInfo->addAttribute("type", $this->relation_types[(string)$relatedIdentifier["relationType"]][0]);
+			if (isset($this->relation_types[(string) $relatedIdentifier["relationType"]])) {
+				$relation->addAttribute("type", $this->relation_types[(string) $relatedIdentifier["relationType"]][1]);
+				$relatedInfo->addAttribute("type", $this->relation_types[(string) $relatedIdentifier["relationType"]][0]);
 			}
 			else {
 				$relation->addAttribute("type", "hasAssociationWith");
@@ -472,7 +473,7 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_version($input_node, $output_nodes) {
-		$output_nodes["citation_metadata"]->addChild("version", (string) $input_node);
+		$output_nodes["citation_metadata"]->addChild("version", CrosswalkHelper::escapeAmpersands($input_node));
 	}
 	
 	private function process_rightsList($input_node, $output_nodes) {
@@ -482,7 +483,7 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_rights($input_node, $output_nodes) {
-		$rightsString = (string) $input_node;
+		$rightsString = CrosswalkHelper::escapeAmpersands($input_node);
 		$rightsUri = null;
 		if (isset($input_node["rightsURI"])) {
 			$rightsUri = $input_node["rightsURI"];
@@ -501,15 +502,15 @@ class DataCite3ToRifcs extends Crosswalk {
 			$descType = $node["descriptionType"];
 			switch ($descType) {
 			case "Abstract":
-				$description = $output_nodes["collection"]->addChild("description", (string) $node);
+				$description = $output_nodes["collection"]->addChild("description", CrosswalkHelper::escapeAmpersands($node));
 				$description->addAttribute("type", "full");
 				break;
 			case "Methods":
-				$description = $output_nodes["collection"]->addChild("description", (string) $node);
+				$description = $output_nodes["collection"]->addChild("description", CrosswalkHelper::escapeAmpersands($node));
 				$description->addAttribute("type", "lineage");
 				break;
 			case "Other":
-				$description = $output_nodes["collection"]->addChild("description", (string) $node);
+				$description = $output_nodes["collection"]->addChild("description", CrosswalkHelper::escapeAmpersands($node));
 				$description->addAttribute("type", "brief");
 				break;
 			}
@@ -522,7 +523,7 @@ class DataCite3ToRifcs extends Crosswalk {
 			foreach ($node->children() as $subnode) {
 				switch ($subnode->getName()) {
 				case "geoLocationPoint":
-					if (preg_match('~(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)~', (string) $subnode, $matches)) {
+					if (preg_match('~(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)~', CrosswalkHelper::escapeAmpersands($subnode), $matches)) {
 						$dcmiPoint =
 							"north={$matches[1]}; " .
 							"east={$matches[2]}";
@@ -531,7 +532,7 @@ class DataCite3ToRifcs extends Crosswalk {
 					}
 					break;
 				case "geoLocationBox":
-					if (preg_match('~(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)~', (string) $subnode, $matches)) {
+					if (preg_match('~(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)~', CrosswalkHelper::escapeAmpersands($subnode), $matches)) {
 						$dcmiBox =
 							"northlimit={$matches[3]}; " .
 							"eastlimit={$matches[4]}; " .
