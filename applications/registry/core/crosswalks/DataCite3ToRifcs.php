@@ -267,7 +267,7 @@ class DataCite3ToRifcs extends Crosswalk {
 			$location = $output_nodes["collection"]->addChild("location");
 			$address = $location->addChild("address");
 			$electronic = $address->addChild("electronic");
-			$electronic->addAttribute("url");
+			$electronic->addAttribute("type", "url");
 			$electronic->addChild("value", "http://dx.doi.org/" . CrosswalkHelper::escapeAmpersands($input_node));
 			
 			$output_nodes["citation_metadata"]->addChild("url", "http://dx.doi.org/" . CrosswalkHelper::escapeAmpersands($input_node));
@@ -282,7 +282,7 @@ class DataCite3ToRifcs extends Crosswalk {
 				switch ($child->getName()) {
 				case "creatorName":
 					$name = CrosswalkHelper::escapeAmpersands($child);
-					if (preg_match('/([-\w]+), ?([-\w\s])/', $name, $matches)) {
+					if (preg_match('/([-\w]+), ?([-\w\s]+)/', $name, $matches)) {
 						$partyArray["type"] = "person";
 						$partyArray["name"]["family"] = $matches[1];
 						$partyArray["name"]["given"] = $matches[2];
@@ -321,7 +321,7 @@ class DataCite3ToRifcs extends Crosswalk {
 	}
 	
 	private function process_publisher($input_node, $output_nodes) {
-		$output_nodes["citation_metadata"]->addChild("publisher", CrosswalkHelper::escapeAmpersands($publisher));
+		$output_nodes["citation_metadata"]->addChild("publisher", CrosswalkHelper::escapeAmpersands($input_node));
 	}
 	
 	private function process_publicationYear($input_node, $output_nodes) {
@@ -350,7 +350,7 @@ class DataCite3ToRifcs extends Crosswalk {
 				switch ($child->getName()) {
 				case "contributorName":
 					$name = CrosswalkHelper::escapeAmpersands($child);
-					if (preg_match('/([-\w]+), ?([-\w\s])/', $name, $matches)) {
+					if (preg_match('/([-\w]+), ?([-\w\s]+)/', $name, $matches)) {
 						$partyArray["type"] = "person";
 						$partyArray["name"]["family"] = $matches[1];
 						$partyArray["name"]["given"] = $matches[2];
@@ -473,6 +473,7 @@ class DataCite3ToRifcs extends Crosswalk {
 			$rightsUri = $input_node["rightsURI"];
 		} elseif (CrosswalkHelper::isUrl($rightsString)) {
 			$rightsUri = $rightsString;
+			$rightsString = '';
 		}
 		$rights = $output_nodes["collection"]->addChild("rights");
 		$rightsStmt = $rights->addChild("rightsStatement", $rightsString);
