@@ -78,7 +78,12 @@ class Gemini2p2ToRifcs extends Crosswalk {
 			 * for the purposes of the pilot.
 			 */
 			$reg_obj->addAttribute("group", "NERC Data Catalogue Service");
-			$key = $reg_obj->addChild("key", $record->xpath('gmd:fileIdentifier/gco:CharacterString')[0]);
+			$fileId = '';
+			foreach ($record->xpath('gmd:fileIdentifier/gco:CharacterString') as $idString) {
+				$fileId = (string) $idString;
+				break;
+			}
+			$key = $reg_obj->addChild("key", $fileId);
 			// If this class is used more widely, a different fallback should be selected:
 			$reg_obj->addChild("originatingSource", "http://www.nerc.ac.uk/");
 			$coll = $reg_obj->addChild("collection");
