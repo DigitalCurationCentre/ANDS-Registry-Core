@@ -49,7 +49,7 @@ class DataCite3ToRifcs extends Crosswalk {
 	public function payloadToRIFCS($payload){
 		$this->load_payload($payload);
 		foreach ($this->oaipmh->ListRecords->children() as $record){
-			if ($record->getName() != "record") {
+			if ($record->getName() != "record" || (isset($record->header["status"]) && $record->header["status"] == "deleted")) {
 				continue;
 			}
 			$reg_obj = $this->rifcs->addChild("registryObject");
